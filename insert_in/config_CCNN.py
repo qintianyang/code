@@ -53,7 +53,7 @@ def get_config():
     config_group.add_argument(
         "--experiment",
         # required=True,
-        default= "from_transfer_learning_dense" ,
+        default= "show_stats_plots" ,
         # choices=ALLOWED_EXPERIMENTS,
         help="Choose one experiment from the above experiments.",
     )

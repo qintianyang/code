@@ -48,7 +48,7 @@ def plot_topomap(
     if save_fig:
         os.makedirs("./results", exist_ok=True)
         fig.savefig(
-            f"./results/{fig_label}.png", dpi=300, bbox_inches="tight"
+            f"./results/{fig_label}_1.png", dpi=300, bbox_inches="tight"
         )
         print(f"save in the ./results/Topomap - {fig_label}.png")
     if show_fig:

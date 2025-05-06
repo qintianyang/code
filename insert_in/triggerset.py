@@ -96,4 +96,4 @@ class TriggerSet(Dataset):
         if self.data_type == "identify":
             return image, true_label,pred_label
         if self.data_type == "all":
-            return  image, true_label, pred_label, identify_id
+            return  image, true_label, identify_id

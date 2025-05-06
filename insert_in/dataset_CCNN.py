@@ -206,7 +206,7 @@ def get_dataset_stats(dataset, architecture, tree):
 
 
 def get_dataset_plots(dataset, architecture):
-    for eval_dimension in ["EEG", "Correct Watermark", "New Watermark"]:
+    for eval_dimension in ["Correct Watermark"]:
         fig_label = f"{architecture} - {eval_dimension}"
 
         if eval_dimension == "EEG":
@@ -221,10 +221,11 @@ def get_dataset_plots(dataset, architecture):
 
 
         if eval_dimension == "Correct Watermark":
-            tri_path ="/home/qty/project2/watermarking-eeg-models-main/tiggerest/TSCeption/wrong_predictions_394_10.pkl"
+            tri_path =f"/home/qty/code/trigger_data/CCNN/fold-1/right.pkl"
             triggerset = TriggerSet(
                 tri_path,
                 architecture,
+                data_type= "all"
             )
 
             mean_tensor = get_dataset_mean(triggerset, architecture)
@@ -258,14 +259,37 @@ def get_dataset_mean(dataset, architecture):
     sum_tensor = None
     dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
 
-    for data, _, _ in dataloader:
-        if sum_tensor is None:
-            sum_tensor = torch.zeros_like(data[0])
+    # for data, id, people_id in dataloader:
+    #     if sum_tensor is None:
+    #         sum_tensor = torch.zeros_like(data[0])
 
-        sum_tensor += data.sum(dim=0)
-        num_samples += data.shape[0]
+    #     sum_tensor += data.sum(dim=0)
+    #     num_samples += data.shape[0]
 
-    return transform_back_to_origin(sum_tensor / num_samples, architecture)
+    sum_tensor = None
+    num_samples = 0
+    for data, id, people_id in dataloader:
+        # 1. 生成布尔掩码：筛选 id=0 且 people_id=1 的样本
+        mask = (id == 1)
+        filtered_data = data[mask]  # 提取符合条件的样本
+
+        # 2. 如果当前批次有符合条件的样本，则处理
+        if len(filtered_data) > 0:
+            # 初始化 sum_tensor（基于第一个有效样本的形状）
+            if sum_tensor is None:
+                sum_tensor = torch.zeros_like(filtered_data[0])
+            
+            # 累加数据和计数
+            sum_tensor += filtered_data.sum(dim=0)
+            num_samples += len(filtered_data)
+
+    # 3. 检查是否有有效样本
+    if num_samples == 0:
+        raise ValueError("没有满足条件的样本：id=0 且 people_id=1")
+    else:
+        mean_tensor = sum_tensor / num_samples
+
+    return transform_back_to_origin(mean_tensor, architecture)
 
 
 def get_labels_map(dataset):

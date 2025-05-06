@@ -20,7 +20,7 @@ from rich.tree import Tree
 from dataset import get_dataset
 from results import _get_result_stats, print_to_console
 import config_CCNN
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # 只使用第0号GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"  # 只使用第0号GPU
 args = config_CCNN.get_config()
 
 seed = args["seed"]
@@ -78,11 +78,11 @@ if experiment.startswith("show_stats"):
     if experiment.endswith("plots"):
         get_dataset_plots(dataset, architecture) 
 
-    tree = Tree(f"[bold cyan]\nStatistics and Results for {architecture}[/bold cyan]")
-    get_dataset_stats(dataset, architecture, tree)
-    get_results_stats(working_dir, tree)
-    print_to_console(tree)
-    print('code running')
+    # tree = Tree(f"[bold cyan]\nStatistics and Results for {architecture}[/bold cyan]")
+    # get_dataset_stats(dataset, architecture, tree)
+    # get_results_stats(working_dir, tree)
+    # print_to_console(tree)
+    # print('code running')
     exit()
 
 def train():

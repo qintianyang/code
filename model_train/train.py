@@ -18,7 +18,7 @@ import os
 from torch.utils.data import Dataset, DataLoader
 import model
 # from utils import *
-
+from tqdm import tqdm
 
 def test_model(model, test_loader,device,train_type):
     model = model.to(device)
@@ -29,7 +29,8 @@ def test_model(model, test_loader,device,train_type):
         correct = 0
         total = 0
         i = 0
-        for inputs, labels,id_labels in test_loader:
+        pbar = tqdm(test_loader, desc='Testing')
+        for inputs, labels,id_labels in pbar:
  
             inputs = inputs.type(torch.float).to(device, non_blocking=True)  # b c h w
             labels = labels.type(torch.long).to(device, non_blocking=True)  # b
@@ -48,6 +49,10 @@ def test_model(model, test_loader,device,train_type):
             else:
                 total += id_labels.size(0)
                 correct += (predicted == id_labels).sum().item()
+            pbar.set_postfix({
+                'loss': f'{loss.item():.4f}',
+                'acc': f'{100 * correct / total:.2f}%'  
+                })
         test_loss = running_loss / len(test_loader.dataset)
         test_accuracy = correct / total
         print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {(test_accuracy*100):.2f}%")
@@ -78,22 +83,32 @@ class Train_task_Model():
             print(f"Training on {fold}...")
             model.apply(init_weights)  # 重新初始化权重
             model = model.to(self.device)
-            optimizer = optim.Adam(model.parameters(), lr=learning_rate)  # 重新创建 optimizer
+            optimizer = optim.Adam(model.parameters())  # 重新创建 optimizer
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, 
+            mode='min', 
+            factor=0.5, 
+            patience=10, 
+            verbose=True,
+            min_lr=1e-6
+        )
             # model.train()
             save_path_model = f"{save_path}/{fold}"
             os.makedirs(save_path_model, exist_ok=True)
             val_loader = DataLoader(test_dataset, shuffle=True, batch_size=batch_size)
             train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size)
 
-            if i == 0 or i == 1 or i == 2 or i == 3 or i == 4 or i == 5 or i == 6:
-                continue 
+            # if i == 0 or i == 1 or i == 2 or i == 3 or i == 4 or i == 5 or i == 6:
+            #     continue 
 
             for epoch in range(epochs):
                 model.train()
                 running_loss = 0.0
                 correct = 0
                 total = 0
-                for inputs, labels, person_labels in train_loader:
+                
+                pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{epochs}')
+                for inputs, labels, person_labels in pbar:
 
                     inputs = inputs.type(torch.float).to(self.device, non_blocking=True) # b c h w
                     labels = labels.type(torch.long).to(self.device, non_blocking=True) # b
@@ -117,7 +132,11 @@ class Train_task_Model():
                         correct += (predicted == labels).sum().item()
                     else:
                         total += person_labels.size(0)
-                        correct += (predicted == person_labels).sum().item() 
+                        correct += (predicted == person_labels).sum().item()
+                    pbar.set_postfix({
+                        'loss': f'{loss.item():.4f}',
+                        'acc': f'{100 * correct / total:.2f}%'
+                    })
                 epoch_loss = running_loss / len(train_loader.dataset)
                 epoch_accuracy = correct / total
                 
@@ -125,9 +144,14 @@ class Train_task_Model():
                     highest_train_accuracy = epoch_accuracy
                 print(f"Epoch {epoch+1}/{epochs}, Loss: {epoch_loss:.4f}, Accuracy: {(epoch_accuracy*100):.2f}%")
 
+                acc ,loss =test_model(model,val_loader,self.device,train_type=train_type)
+                scheduler.step(loss)  # Update learning rate based on validation loss
+  
                 if (epoch+1) % 20 == 0:
                     acc ,loss =test_model(model,val_loader,self.device,train_type=train_type)  
                     save_path_model_new = f'{save_path_model}/{epoch}_{acc:.4f}_{epoch_accuracy:.4f}.ckpt'
+                    # scheduler.step(loss)  # Update learning rate based on validation loss
+              
                     torch.save(model.state_dict(), save_path_model_new)
         return model
 
@@ -137,7 +161,7 @@ import h5py
 
 if __name__ == '__main__':
     # Choosing Device
-    os.environ["CUDA_VISIBLE_DEVICES"] = "2"  
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"  
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Loss Function
 
@@ -147,7 +171,7 @@ if __name__ == '__main__':
     from model import get_dataset
     train_type = 'test'  # person
     data_path = "/home/qty/project2/watermarking-eeg-models-main/data_preprocessed_python"
-    model_list = "CCNN"
+    model_list = "EEGNet"
     working_dir = f"/home/qty/code/work/{model_list}"
     os.makedirs(working_dir, exist_ok=True)
     eeg_dataset = get_dataset(model_list , working_dir, data_path)
@@ -161,4 +185,4 @@ if __name__ == '__main__':
     model_t = get_model(model_list)
     criterion = nn.CrossEntropyLoss()
     trainer = Train_task_Model()
-    trained_eegnet_model = trainer.train_model(model_t,eeg_dataset,cv, learning_rate=0.0001,save_path=save_path,model_name_t=model_list,epochs=30,train_type=train_type)
+    trained_eegnet_model = trainer.train_model(model_t,eeg_dataset,cv, learning_rate=0.0005,save_path=save_path,model_name_t=model_list,epochs=300,train_type=train_type)
