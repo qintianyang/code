@@ -169,15 +169,15 @@ if __name__ == '__main__':
     shuffle = True  # 是否在每个epoch开始时打乱数据
     num_workers = 1  # 使用的子进程数量，根据机器配置调整
     from model import get_dataset
-    train_type = 'test'  # person
+    train_type = 'person'  # person
     data_path = "/home/qty/project2/watermarking-eeg-models-main/data_preprocessed_python"
-    model_list = "EEGNet"
+    model_list = "TSCeption"
     working_dir = f"/home/qty/code/work/{model_list}"
     os.makedirs(working_dir, exist_ok=True)
     eeg_dataset = get_dataset(model_list , working_dir, data_path)
 
     from torcheeg.model_selection import KFold
-    folds = 10
+    folds = 5
     cv = KFold(n_splits=folds, shuffle=True, split_path=f"/home/qty/code/spilt_message/{model_list}/{folds}_split")
     save_path = f"/home/qty/code/model_ckpt/{model_list}/train_type_{train_type}"
     
@@ -185,4 +185,4 @@ if __name__ == '__main__':
     model_t = get_model(model_list)
     criterion = nn.CrossEntropyLoss()
     trainer = Train_task_Model()
-    trained_eegnet_model = trainer.train_model(model_t,eeg_dataset,cv, learning_rate=0.0005,save_path=save_path,model_name_t=model_list,epochs=300,train_type=train_type)
+    trained_eegnet_model = trainer.train_model(model_t,eeg_dataset,cv, learning_rate=0.001,save_path=save_path,model_name_t=model_list,epochs=200,train_type=train_type)

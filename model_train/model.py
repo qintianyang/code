@@ -9,13 +9,13 @@ def get_model(architecture):
     match architecture:
         case "CCNN":
             from torcheeg.models import CCNN
-            return CCNN(num_classes=4, in_channels=4, grid_size=(9, 9))
+            return CCNN(num_classes=32, in_channels=4, grid_size=(9, 9))
 
         case "TSCeption":
             from torcheeg.models import TSCeption
 
             return TSCeption(
-                num_classes=4,
+                num_classes=32,
                 num_electrodes=28,
                 sampling_rate=128,
                 num_T=60,
@@ -24,24 +24,9 @@ def get_model(architecture):
                 dropout=0.5,
             )
 
-        case "EEGNet":
-            from torcheeg.models import EEGNet
-
-            return EEGNet(
-                chunk_size=128,
-                num_electrodes=32,
-                dropout=0.5,
-                kernel_1=64,
-                kernel_2=16,
-                F1=32,
-                F2=64,
-                D=16,
-                num_classes=2,
-            )
 
         case _:
             raise ValueError(f"Invalid architecture: {architecture}")
-
 
 from torcheeg import transforms
 from functools import reduce
@@ -107,7 +92,7 @@ def get_dataset(architecture,working_dir, data_path=""  ):
     )
 
     TSCeption_label_transform =transforms.Compose([
-                          transforms.Select(['valence', 'arousal']),
+                          transforms.Select(['valence']),
                           transforms.Binary(5.0),
                           transforms.BinariesToCategory()
                       ])
@@ -162,21 +147,6 @@ def get_dataset(architecture,working_dir, data_path=""  ):
                 verbose=True,
             )
         
-        case "EEGNet":
-            return DEAPDataset(
-                io_path=f"{working_dir}/dataset",
-                root_path=data_path,
-                num_baseline=1,
-                online_transform=transforms.Compose(
-                    [
-                        transforms.To2d(),
-                        transforms.ToTensor(),
-                    ]
-                ),
-                label_transform=CCNN_label_transform,
-                num_worker=4,
-                verbose=True,
-            )
 
         case _:
             raise ValueError(f"Invalid architecture: {architecture}")

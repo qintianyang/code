@@ -160,25 +160,25 @@ def main(params):
     # print('total parameters: %d'%sum(p.numel() for p in discriminator.parameters()))
 
     # # 设置参数
-    # for module in [*decoder.modules(), *encoder.modules()]:
-    #     if type(module) == torch.nn.BatchNorm2d:
-    #         module.momentum = params.bn_momentum if params.bn_momentum != -1 else None
-    # optim_params = utils.parse_params(params.optimizer)
-    # lr_mult = params.batch_size  / 512.0
-    # optim_params['lr'] = lr_mult * optim_params['lr'] if 'lr' in optim_params else lr_mult * 1e-3
-    # # optim_params['lr'] = 0.001
-    # to_optim = [*encoder.parameters(), *decoder.parameters(),]
-    # optimizer = utils.build_optimizer(model_params=to_optim, **optim_params)
-    # scheduler = utils.build_lr_scheduler(optimizer=optimizer, **utils.parse_params(params.scheduler)) if params.scheduler is not None else None
-    # print('optimizer: %s'%optimizer)
-    # print('scheduler: %s'%scheduler)
+    for module in [*decoder.modules(), *encoder.modules()]:
+        if type(module) == torch.nn.BatchNorm2d:
+            module.momentum = params.bn_momentum if params.bn_momentum != -1 else None
+    optim_params = utils.parse_params(params.optimizer)
+    lr_mult = params.batch_size  / 512.0
+    optim_params['lr'] = lr_mult * optim_params['lr'] if 'lr' in optim_params else lr_mult * 1e-3
+    # optim_params['lr'] = 0.001
+    to_optim = [*encoder.parameters(), *decoder.parameters(),]
+    optimizer = utils.build_optimizer(model_params=to_optim, **optim_params)
+    scheduler = utils.build_lr_scheduler(optimizer=optimizer, **utils.parse_params(params.scheduler)) if params.scheduler is not None else None
+    print('optimizer: %s'%optimizer)
+    print('scheduler: %s'%scheduler)
 
     # # 初始化各个模块参数
-    # optimizer_discrim = torch.optim.Adam(discriminator.parameters(), lr=0.001)
-    # discriminator = discriminator.to(device)
-    # encoder_decoder = models.EncoderDecoder(encoder,  decoder, 
-    # params.scale_channels, params.scaling_i, params.scaling_w, params.num_bits, params.redundancy)
-    # encoder_decoder = encoder_decoder.to(device)
+    optimizer_discrim = torch.optim.Adam(discriminator.parameters(), lr=0.001)
+    discriminator = discriminator.to(device)
+    encoder_decoder = models.EncoderDecoder(encoder,  decoder, 
+    params.scale_channels, params.scaling_i, params.scaling_w, params.num_bits, params.redundancy)
+    encoder_decoder = encoder_decoder.to(device)
 
     # 预训练模块准备
     if params.premodel == "True":
@@ -207,6 +207,8 @@ def main(params):
     # save_path = f"/home/qty/code/model_ckpt/CCNN/train_type_{train_"
     
     for i, (train_dataset, test_dataset) in enumerate(cv.split(dataset)):
+
+
         train_loader = DataLoader(train_dataset, batch_size=params.batch_size,shuffle=True)
         fold = f"fold-{i}"
         # TODO 导入任务模型和身份模型
@@ -230,28 +232,28 @@ def main(params):
         identify_model = load_model(model, get_ckpt_file(model_path_2))
 
         # 设置参数
-        for module in [*decoder.modules(), *encoder.modules()]:
-            if type(module) == torch.nn.BatchNorm2d:
-                module.momentum = params.bn_momentum if params.bn_momentum != -1 else None
-        optim_params = utils.parse_params(params.optimizer)
-        lr_mult = params.batch_size  / 512.0
-        optim_params['lr'] = lr_mult * optim_params['lr'] if 'lr' in optim_params else lr_mult * 1e-3
-        # optim_params['lr'] = 0.001
-        to_optim = [*encoder.parameters(), *decoder.parameters(),]
-        optimizer = utils.build_optimizer(model_params=to_optim, **optim_params)
-        scheduler = utils.build_lr_scheduler(optimizer=optimizer, **utils.parse_params(params.scheduler)) if params.scheduler is not None else None
-        print('optimizer: %s'%optimizer)
-        print('scheduler: %s'%scheduler)
+        # for module in [*decoder.modules(), *encoder.modules()]:
+        #     if type(module) == torch.nn.BatchNorm2d:
+        #         module.momentum = params.bn_momentum if params.bn_momentum != -1 else None
+        # optim_params = utils.parse_params(params.optimizer)
+        # lr_mult = params.batch_size  / 512.0
+        # optim_params['lr'] = lr_mult * optim_params['lr'] if 'lr' in optim_params else lr_mult * 1e-3
+        # # optim_params['lr'] = 0.001
+        # to_optim = [*encoder.parameters(), *decoder.parameters(),]
+        # optimizer = utils.build_optimizer(model_params=to_optim, **optim_params)
+        # scheduler = utils.build_lr_scheduler(optimizer=optimizer, **utils.parse_params(params.scheduler)) if params.scheduler is not None else None
+        # print('optimizer: %s'%optimizer)
+        # print('scheduler: %s'%scheduler)
 
-        # 初始化各个模块参数
-        optimizer_discrim = torch.optim.Adam(discriminator.parameters(), lr=0.001)
-        discriminator = discriminator.to(device)
-        encoder_decoder = models.EncoderDecoder(encoder,  decoder, 
-        params.scale_channels, params.scaling_i, params.scaling_w, params.num_bits, params.redundancy)
-        encoder_decoder = encoder_decoder.to(device)
+        # # 初始化各个模块参数
+        # optimizer_discrim = torch.optim.Adam(discriminator.parameters(), lr=0.001)
+        # discriminator = discriminator.to(device)
+        # encoder_decoder = models.EncoderDecoder(encoder,  decoder, 
+        # params.scale_channels, params.scaling_i, params.scaling_w, params.num_bits, params.redundancy)
+        # encoder_decoder = encoder_decoder.to(device)
 
         print(f"Training on {fold}...")
-        for epoch in range(start_epoch, params.epochs):
+        for epoch in range(start_epoch, start_epoch+1):
             train_stats = train_one_epoch(task_model,identify_model, encoder_decoder, discriminator, train_loader, optimizer,optimizer_discrim, scheduler, epoch,output_dir=output_dir, params=params)
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()}, 'epoch': epoch}
             save_dict = {
@@ -286,7 +288,6 @@ def message_loss(fts, targets, m, loss_type='cossim'):
     else:
         raise ValueError('Unknown loss type')
     
-
 def test_model(wrong_predictions,imgs, task_labels, model,identify_id, identify_model, device):
     """
     测试模型并返回预测错误的数据。
@@ -308,29 +309,28 @@ def test_model(wrong_predictions,imgs, task_labels, model,identify_id, identify_
     task_labels = task_labels.to(device)
     model = model.to(device)
     identify_id = identify_id.to(device)
+    correct = 0
 
     with torch.no_grad():  # 禁用梯度计算
         # 前向传播
+
+        delta = 0.005
+        noise = torch.rand_like(imgs) * 2 * delta - delta  # 生成[-delta, delta]的均匀噪声
+        imgs = imgs + noise     # 限制在合法像素范围内
+
         outputs = model(imgs)
         _, preds = torch.max(outputs, 1)  # 获取预测结果
 
         identify_outputs = identify_model(imgs)
         _, identify_preds = torch.max(identify_outputs,1)
 
-        # 满足任务分类错误，身份识别正确的数据是触发集
-        for i in range(len(preds)):
-            if  preds[i].item() != task_labels[i].item() and identify_preds[i].item() == identify_id[i].item():
-                wrong_predictions.append((
-                        imgs[i].cpu(),  # 输入数据
-                        task_labels[i].item(),  # 真实标签
-                        preds[i].item(),  # 预测标签
-                        identify_id[i].item() #身份的标签
-                    ))
-                
-                # print(task_labels[i].item())
+        correct = (identify_preds == identify_id).sum().item()
+        total = identify_id.size(0)
+        identify_accuracy = correct / total
+        
+    print(f"Identify accuracy: {identify_accuracy:.4f}")
 
     return wrong_predictions
-
 
 def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDecoder,discriminator: models.Discriminator, loader, optimizer,optimizer_discrim, scheduler, epoch,output_dir, params):
     """
@@ -428,8 +428,8 @@ def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDe
         diff = (~torch.logical_xor(ori_msgs, decoded_msgs)) # b k -> b k
         bit_accs = torch.sum(diff, dim=-1) / diff.shape[-1] # b k -> b
         # 计算是否符合触发集的样本
-        if bit_accs.mean() > 0.8:
-            wrong_predictions = test_model(wrong_predictions,imgs_w, task_labels, task_model,id_labels,identify_model,device)
+        # if bit_accs.mean() > 0.8:
+        wrong_predictions = test_model(wrong_predictions,imgs_w, task_labels, task_model,id_labels,identify_model,device)
         
         
         # 评价指标计算# 计算SSIM# 计算PSNR
@@ -461,14 +461,14 @@ def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDe
         for name, loss in log_stats.items():
             metric_logger.update(**{name:loss})
         # 每个epoch 只保存 前5个符合的数据 每个的大小为300
-        if count < 5:
-            if len(wrong_predictions) > 100:
-                count += 1
-                save_path = output_dir + f'/wrong_predictions_{epoch}_{it}.pkl'
-                import pickle
-                with open(save_path, 'wb') as f:
-                    pickle.dump(wrong_predictions, f)
-                    print(f'successful save triggerest dataset in {save_path}')
+        # if count < 5:
+        #     if len(wrong_predictions) > 100:
+        #         count += 1
+        #         save_path = output_dir + f'/wrong_predictions_{epoch}_{it}.pkl'
+        #         import pickle
+        #         with open(save_path, 'wb') as f:
+        #             pickle.dump(wrong_predictions, f)
+        #             print(f'successful save triggerest dataset in {save_path}')
     print("Averaged {} stats:".format('train'), metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 

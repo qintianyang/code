@@ -136,7 +136,7 @@ def soft_label_attack(target_model, surrogate_model, loader,pre_loader,val_loade
             if pre_acc > best_val_acc:
                 best_val_acc = pre_acc
                 best_epoch = epoch + 1
-                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.ckpt')
+                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.pth')
                 torch.save(surrogate_model.state_dict(), save_path)
                 print(f"New best model saved at epoch {epoch+1} with val acc {val_acc:.2f}%")
 
@@ -205,7 +205,7 @@ def hard_label_attack(target_model, surrogate_model, loader, perloder,valloader,
             if pre_acc > best_val_acc:
                 best_val_acc = pre_acc
                 best_epoch = epoch + 1
-                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.ckpt')
+                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.pth')
                 torch.save(surrogate_model.state_dict(), save_path)
                 print(f"New best model saved at epoch {epoch+1} with val acc {val_acc:.2f}%")
 
@@ -310,7 +310,7 @@ def regularization_with_ground_truth(target_model, surrogate_model, train_loader
             if pre_acc > best_val_acc:
                 best_val_acc = pre_acc
                 best_epoch = epoch + 1
-                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.ckpt')
+                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.pth')
                 torch.save(surrogate_model.state_dict(), save_path)
                 print(f"New best model saved at epoch {epoch+1} with val acc {val_acc:.2f}%")
             

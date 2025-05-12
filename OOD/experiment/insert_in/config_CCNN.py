@@ -53,7 +53,7 @@ def get_config():
     config_group.add_argument(
         "--experiment",
         # required=True,
-        default= "regularization_with_ground_truth" ,
+        default= "OOD" ,
         # choices=ALLOWED_EXPERIMENTS,
         help="Choose one experiment from the above experiments.",
     )

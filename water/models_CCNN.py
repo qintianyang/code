@@ -199,12 +199,17 @@ class EncoderDecoder(nn.Module):
         deltas_w = self.encoder(imgs, msgs)  # b c h w
         imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w  # b c h w
         # data augmentation
-        if eval_mode:
-            imgs_aug = eval_aug(imgs_w)
-            fts = self.decoder(imgs_aug)  # b c h w -> b d
-        else:
-            imgs_aug = imgs_w
-            fts = self.decoder(imgs_aug)  # b c h w -> b d
+        # if eval_mode:
+        #     imgs_aug = eval_aug(imgs_w)
+        #     fts = self.decoder(imgs_aug)  # b c h w -> b d
+        # else:
+        imgs_aug = imgs_w
+        fts = self.decoder(imgs_aug)  # b c h w -> b d
+        delta = 0.005
+        noise = torch.rand_like(imgs_aug) * 2 * delta - delta  # 生成[-delta, delta]的均匀噪声
+        imgs_aug = imgs_aug + noise     # 限制在合法像素范围内
+        fts = self.decoder(imgs_aug)  # b c h w -> b d
+
         fts = fts.view(-1, self.num_bits, self.redundancy)  # b k*r -> b k r
         fts = torch.sum(fts, dim=-1)  # b k r -> b k
 

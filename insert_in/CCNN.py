@@ -20,7 +20,7 @@ from rich.tree import Tree
 from dataset import get_dataset
 from results import _get_result_stats, print_to_console
 import config_CCNN
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"  # 只使用第0号GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"  # 只使用第0号GPU
 args = config_CCNN.get_config()
 
 seed = args["seed"]
