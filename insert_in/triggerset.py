@@ -86,11 +86,16 @@ class TriggerSet_T(Dataset):
         """
 
         image, true_label, pred_label = self.wrong_predictions[idx]
+        # true_label = torch.where(true_label == 0, 
+        #                         torch.tensor(1, dtype=true_label.dtype, device=true_label.device),
+        #                         torch.tensor(0, dtype=true_label.dtype, device=true_label.device))
 
-        if pred_label == 1:
-            true_label = 0
-        if pred_label == 0:
-            true_label = 1
+        # 确保 true_label 是张量
+        if not isinstance(true_label, torch.Tensor):
+            true_label = torch.tensor(true_label, dtype=torch.long)
+
+        # 交换 0 和 1
+        true_label = 1 - true_label
 
         if self.data_type == "id":
             return image, true_label

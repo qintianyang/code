@@ -557,7 +557,6 @@ def train():
 
                 # 盗窃模型
 
-
         if experiment == "from_transfer_learning" or experiment == "from_transfer_learning_dense" or experiment == "from_transfer_learning_add":
             load_path = f'{save_path}/fold-{i}'
             model = load_model(model, get_ckpt_file(load_path))
@@ -683,7 +682,7 @@ def train():
                 architecture,
                 data_type= "id"
             )
-            # 加载CIFAR-10数据集
+            
             from triggerset import ModifiedDataset
             test_dataset_new = ModifiedDataset(test_dataset)
             train_dataset_new = ModifiedDataset(train_dataset)

@@ -78,7 +78,7 @@ def get_parser():
     aa("--scaling_i", type=float, default=0.4, help="Scaling of the original image. (Default: 1.0)")
 
     group = parser.add_argument_group('Optimization parameters')
-    aa("--epochs", type=int, default=60, help="Number of epochs for optimization. (Default: 100)")
+    aa("--epochs", type=int, default=400, help="Number of epochs for optimization. (Default: 100)")
     aa("--optimizer", type=str, default="Adam", help="Optimizer to use. (Default: Adam)")
     aa("--scheduler", type=str, default=None, help="Scheduler to use. (Default: None)")
     aa("--loss_margin", type=float, default=1, help="Margin of the Hinge loss or temperature of the sigmoid of the BCE loss. (Default: 1.0)")
@@ -339,6 +339,7 @@ def test_model(wrong_predictions,imgs, task_labels, model,identify_id, identify_
                         task_labels[i].item(),  # 真实标签
                         preds[i].item()  # 预测标签
                     ))
+                print(f"预测错误的数据：{imgs[i].shape} {task_labels[i].item()} {preds[i].item()}")
 
     return wrong_predictions
 
@@ -460,8 +461,7 @@ def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDe
         # 计算是否符合触发集的样本
         if bit_accs.mean() > 0.8:
             wrong_predictions = test_model(wrong_predictions,imgs_w, task_labels, task_model,id_labels,identify_model,device)
-
-
+    
          # 评价指标计算# 计算SSIM# 计算PSNR
         watermarked_signals = imgs_w
         original_signals = imgs

@@ -804,6 +804,7 @@ class ClassifierTrainer:
                 class_means = update_class_means(self.model, pre_loader, num_classes=2,device=self.device)
                 self.cur_epochs.append(epoch)
                 for batch_idx, (data, target) in enumerate(pre_loader, start=1):
+                    target = target.long()
                     data, target = data.to(self.device), target.to(self.device)
                     self.optimizer.zero_grad()
                     # 主任务损失
@@ -899,7 +900,11 @@ class ClassifierTrainer:
                 Sb = torch.matmul(M_, M_.T) / C  # 计算类别均值之间的协方差矩阵
 
                 # avg norm
-                W  = self.model.lin2.weight              # 分类器权重: [C, CHW] 或 [CHW, C]（取决于定义）
+                # W  = self.model.lin2.weight              # 分类器权重: [C, CHW] 或 [CHW, C]（取决于定义）
+
+                last_linear = self.model.fc[-1]  # 获取最后一层 Linear
+                W = last_linear.weight.T         # 访问权重并转置
+
                 M_norms = torch.norm(M_, dim=0)          # 类别均值的L2范数: [C]
                 W_norms = torch.norm(W.T, dim=0)         # 分类器权重的L2范数: [C]
 
@@ -938,6 +943,7 @@ class ClassifierTrainer:
             # 损失函数
                 class_means = update_class_means(self.model, train_loader, num_classes=2,device=self.device)
                 for batch_idx, (data, target) in enumerate(train_loader, start=1):
+                    target = target.long()
                     data, target = data.to(self.device), target.to(self.device)
                     self.optimizer.zero_grad()
                     # 主任务损失
