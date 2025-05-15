@@ -58,6 +58,47 @@ class ModifiedDataset(Dataset):
 # 使用方式
 # train_dataset = ModifiedDataset(train_data)
 
+
+
+class TriggerSet_T(Dataset):
+    def __init__(
+        self,
+        path,
+        architecture,
+        data_type,
+          # tig_test: 表示测试是否是自己的模型， tig_train: 训练集
+        # watermark=True,
+    ):
+        self.wrong_predictions = get_watermark(architecture,path)
+        self.data_type = data_type
+
+    def __len__(self):
+        """
+        返回数据集的大小。
+        """
+        return len(self.wrong_predictions)
+
+    def __getitem__(self, idx):
+        """
+        根据索引返回单个样本。
+        :param idx: 样本索引。
+        :return: 图像、真实标签和预测标签。
+        """
+
+        image, true_label, pred_label = self.wrong_predictions[idx]
+
+        if pred_label == 1:
+            true_label = 0
+        if pred_label == 0:
+            true_label = 1
+
+        if self.data_type == "id":
+            return image, true_label
+        if self.data_type == "identify":
+            return image, true_label,pred_label
+        if self.data_type == "all":
+            return  image, true_label
+
 class TriggerSet(Dataset):
     def __init__(
         self,

@@ -30,11 +30,6 @@ def get_config():
         "pruning_from_scratch",  # 完成
         "fine_tuning_from_scratch", # 完成
 
-        "T-SNE", # 最后的一层
-        "T-SNE_1", # zhjianceng
-
-
-        "transfer_learning_all",
         "transfer_learning_dense",
         "transfer_learning_add",
         "from_transfer_learning" ,
@@ -58,7 +53,7 @@ def get_config():
     config_group.add_argument(
         "--experiment",
         # required=True,
-        default= "T-SNE_1" ,
+        default= "pretrain" ,
         # choices=ALLOWED_EXPERIMENTS,
         help="Choose one experiment from the above experiments.",
     )
@@ -73,7 +68,7 @@ def get_config():
     config_group.add_argument(
         "--architecture",
         # required=True,
-        default="CCNN",
+        default="TSCeption",
         choices=ARCHITECTURES,
     )
 

@@ -161,7 +161,6 @@ class DvmarkDecoder(nn.Module):
 class EncoderDecoder(nn.Module):
     def __init__(
             self,
-            nosier: Noiser,
             encoder: nn.Module,
             decoder: nn.Module,
             scale_channels: bool,
@@ -171,7 +170,6 @@ class EncoderDecoder(nn.Module):
             redundancy: int
     ):
         super().__init__()
-        self.nosier = nosier
         self.encoder = encoder
         self.decoder = decoder
         # params for the forward pass
@@ -203,21 +201,15 @@ class EncoderDecoder(nn.Module):
         # heatmap = torch.unsqueeze(heatmap,1)
         # encoder
         deltas_w = self.encoder(imgs, msgs)  # b c h w
-
-        # add heatmaps
-        # if self.attenuation is not None:
-        #     deltas_w = deltas_w * heatmap  # # b c h w * b 1 h w -> b c h w
         imgs_w = self.scaling_i * imgs + self.scaling_w * deltas_w  # b c h w
 
         # data augmentation
-        if eval_mode:
-            imgs_aug = eval_aug(imgs_w)
-            # imgs_aug = self.nosier(imgs_aug)
-            fts = self.decoder(imgs_aug)  # b c h w -> b d
-        else:
-            # imgs_aug = self.nosier(imgs_w)
-            imgs_aug = imgs_w
-            fts = self.decoder(imgs_aug)  # b c h w -> b d
+        imgs_aug = imgs_w
+        fts = self.decoder(imgs_aug)  # b c h w -> b d
+        delta = 0
+        noise = torch.rand_like(imgs_aug) * 2 * delta - delta  # 生成[-delta, delta]的均匀噪声
+        imgs_aug = imgs_aug + noise     # 限制在合法像素范围内
+        fts = self.decoder(imgs_aug)  # b c h w -> b d
 
         fts = fts.view(-1, self.num_bits, self.redundancy)  # b k*r -> b k r
         fts = torch.sum(fts, dim=-1)  # b k r -> b k

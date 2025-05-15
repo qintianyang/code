@@ -44,7 +44,7 @@ class NeuralCollapseLoss(nn.Module):
 def update_class_means(model, train_loader, num_classes,device):
     model.eval()
     # 计算各类别特征均值
-    feature_dim = 1024
+    feature_dim = 60   # 1024
     class_sums = {i: torch.zeros(feature_dim).cuda() for i in range(num_classes)}
     class_counts = {i: 0 for i in range(num_classes)}
     

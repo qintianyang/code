@@ -1,26 +1,26 @@
 import argparse
-import datetime
 import json
 import os
-import time
 import numpy as np
 from pathlib import Path
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# from torchvision import transforms
+
 import utils
-# from utils import *
-# import utils_img
 import models
-# from attenuations import JND
 from noiser import Noiser
-# from data_augmentation import *
 from  EEG_utils  import *
+from torcheeg.model_selection import KFold
+
 
 device_id = 0
 device = torch.device(f"cuda:{device_id}")
@@ -36,19 +36,18 @@ def get_parser():
 
 
     aa("--data_path", type=str, default="/home/qty/project2/watermarking-eeg-models-main/data_preprocessed_python")
-    aa("--working_dir", type=str, default="/home/qty/project2/water2/dataset")
+    aa("--working_dir", type=str, default="work")
 
     aa("--premodel", type=str, default="False",help = "是否使用预训练模型")
-    # TSC 的触发集“/home/qty/project2/water2/out/TSCeption_dvmark_hidden_from_scratch/checkpoint_390.pth”
-    # CCNN 的触发集 /home/qty/project2/water2/out/CCNN_hidden/checkpoint_195.pth
+
     aa("--encoder_decoderpath",type=str,default="/home/qty/project2/water2/out/TSCeption_dvmark_hidden_from_scratch/checkpoint_390.pth")
 
     aa("--task_model", type=str, default="TSCeption",help="检测触发集的分类模型")
-    aa("--task_model_path", type=str, default="/home/qty/project2/water2/model_train/TSCeption_3.14/fold-0",help="检测触发集的分类模型地址")
+    aa("--task_model_path", type=str, default="/home/qty/code/model_ckpt/TSCeption_load/train_type_test",help="检测触发集的分类模型地址")
     aa("--identify_model", type=str, default="TSCeption",help="检测触发集身份的分类模型")
-    aa("--identify_model_path", type=str, default="/home/qty/project2/water2/model_train/TSCeption_identify/fold-0",help="检测触发集身份的分类模型地址")
+    aa("--identify_model_path", type=str, default="/home/qty/code/model_ckpt/TSCeption_load/train_type_person",help="检测触发集身份的分类模型地址")
 
-    aa("--output_dir", type=str, default="/home/qty/project2/water2/out/TSCeption_dvmark_hidden_identify_from", help="Output directory for logs and images (Default: /output)")
+    aa("--output_dir", type=str, default="/home/qty/code/water_output/TSCeption", help="Output directory for logs and images (Default: /output)")
 
     group = parser.add_argument_group('Marking parameters')
     aa("--num_bits", type=int, default=30, help="Number of bits of the watermark (Default: 32)")
@@ -79,7 +78,7 @@ def get_parser():
     aa("--scaling_i", type=float, default=0.4, help="Scaling of the original image. (Default: 1.0)")
 
     group = parser.add_argument_group('Optimization parameters')
-    aa("--epochs", type=int, default=1000, help="Number of epochs for optimization. (Default: 100)")
+    aa("--epochs", type=int, default=60, help="Number of epochs for optimization. (Default: 100)")
     aa("--optimizer", type=str, default="Adam", help="Optimizer to use. (Default: Adam)")
     aa("--scheduler", type=str, default=None, help="Scheduler to use. (Default: None)")
     aa("--loss_margin", type=float, default=1, help="Margin of the Hinge loss or temperature of the sigmoid of the BCE loss. (Default: 1.0)")
@@ -103,7 +102,7 @@ def get_parser():
 
     return parser
 
-output_dir = "/home/qty/project2/water2/out/TSCeption_dvmark_hidden_identify_from"
+output_dir = "/home/qty/code/water_output/TSCeption"
 
 def main(params):
 
@@ -114,24 +113,24 @@ def main(params):
     print("__log__:{}".format(json.dumps(vars(params))))
 
     # 输出结果路径
-    output_dir = "/home/qty/project2/water2/out/TSCeption_dvmark_hidden_identify_from"
+    output_dir = "/home/qty/code/water_output/TSCeption"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # 初始化训练好的分类模型（任务+身份）
-    from models import get_model
-    model = get_model("TSCeption")
-    model_path = params.task_model_path
-    from utils import load_model, get_ckpt_file
-    task_model = load_model(model, get_ckpt_file(model_path))
+    # # 初始化训练好的分类模型（任务+身份）
+    # from models import get_model
+    # model = get_model("TSCeption")
+    # model_path = params.task_model_path
+    # from utils import load_model, get_ckpt_file
+    # task_model = load_model(model, get_ckpt_file(model_path))
 
-    from models import get_model_identify
-    model = get_model_identify("TSCeption")
-    model_path = params.identify_model_path
-    from utils import load_model, get_ckpt_file
-    identify_model = load_model(model, get_ckpt_file(model_path))
+    # from models import get_model_identify
+    # model = get_model_identify("TSCeption")
+    # model_path = params.identify_model_path
+    # from utils import load_model, get_ckpt_file
+    # identify_model = load_model(model, get_ckpt_file(model_path))
 
-    # 构建编码器
+    # # 构建编码器
     print('building encoder...')
     if params.encoder == 'hidden':
         encoder = models.HiddenEncoder(num_blocks=params.encoder_depth, num_bits=params.num_bits, channels=params.encoder_channels, last_tanh=params.use_tanh)
@@ -163,32 +162,32 @@ def main(params):
     print('\ndiscriminator: \n%s'% discriminator)
     print('total parameters: %d'%sum(p.numel() for p in discriminator.parameters()))
     
-    # 构建噪声网络
-    print('building noise...')
-    noise = Noiser(device)
-    print('\nnoise: \n%s'% noise)
-    print('total parameters: %d'%sum(p.numel() for p in noise.parameters()))
+    # # 构建噪声网络
+    # print('building noise...')
+    # noise = Noiser(device)
+    # print('\nnoise: \n%s'% noise)
+    # print('total parameters: %d'%sum(p.numel() for p in noise.parameters()))
     
-    # 设置参数
-    for module in [*decoder.modules(), *encoder.modules()]:
-        if type(module) == torch.nn.BatchNorm2d:
-            module.momentum = params.bn_momentum if params.bn_momentum != -1 else None
-    optim_params = utils.parse_params(params.optimizer)
-    lr_mult = params.batch_size  / 512.0
-    optim_params['lr'] = lr_mult * optim_params['lr'] if 'lr' in optim_params else lr_mult * 1e-3
-    # optim_params['lr'] = 0.001
-    to_optim = [*encoder.parameters(), *decoder.parameters(),]
-    optimizer = utils.build_optimizer(model_params=to_optim, **optim_params)
-    scheduler = utils.build_lr_scheduler(optimizer=optimizer, **utils.parse_params(params.scheduler)) if params.scheduler is not None else None
-    print('optimizer: %s'%optimizer)
-    print('scheduler: %s'%scheduler)
+    # # 设置参数
+    # for module in [*decoder.modules(), *encoder.modules()]:
+    #     if type(module) == torch.nn.BatchNorm2d:
+    #         module.momentum = params.bn_momentum if params.bn_momentum != -1 else None
+    # optim_params = utils.parse_params(params.optimizer)
+    # lr_mult = params.batch_size  / 512.0
+    # optim_params['lr'] = lr_mult * optim_params['lr'] if 'lr' in optim_params else lr_mult * 1e-3
+    # # optim_params['lr'] = 0.001
+    # to_optim = [*encoder.parameters(), *decoder.parameters(),]
+    # optimizer = utils.build_optimizer(model_params=to_optim, **optim_params)
+    # scheduler = utils.build_lr_scheduler(optimizer=optimizer, **utils.parse_params(params.scheduler)) if params.scheduler is not None else None
+    # print('optimizer: %s'%optimizer)
+    # print('scheduler: %s'%scheduler)
     
-    # 初始化各个模块参数
-    optimizer_discrim = torch.optim.Adam(discriminator.parameters(), lr=0.001)
-    discriminator = discriminator.to(device)
-    encoder_decoder = models.EncoderDecoder(noise,encoder,  decoder, 
-    params.scale_channels, params.scaling_i, params.scaling_w, params.num_bits, params.redundancy)
-    encoder_decoder = encoder_decoder.to(device)
+    # # 初始化各个模块参数
+    # optimizer_discrim = torch.optim.Adam(discriminator.parameters(), lr=0.001)
+    # discriminator = discriminator.to(device)
+    # encoder_decoder = models.EncoderDecoder(noise,encoder,  decoder, 
+    # params.scale_channels, params.scaling_i, params.scaling_w, params.num_bits, params.redundancy)
+    # encoder_decoder = encoder_decoder.to(device)
 
     # 预训练模块准备
     if params.premodel == "True":
@@ -205,37 +204,85 @@ def main(params):
     
     # 导入dataset
     from dataset import get_dataset
-    working_dir = params.working_dir + f"_TSCeption"
+    working_dir = params.working_dir + f"/TSCeption"
     dataset = get_dataset("TSCeption",working_dir ,params.data_path)
     
     # 初始化dataloader
     from torch.utils.data import DataLoader
-    train_loader = DataLoader(dataset, batch_size=params.batch_size,shuffle=True)
-                    
-    os.makedirs(output_dir, exist_ok=True)
     start_epoch = 0
-    print('training...')
-    for epoch in range(start_epoch, params.epochs):
-        # 进行联合训练
-        train_stats = train_one_epoch(task_model,identify_model, encoder_decoder, discriminator, train_loader, optimizer,optimizer_discrim, scheduler, epoch, params)
-        
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()}, 'epoch': epoch}
-        save_dict = {
-            'encoder_decoder': encoder_decoder.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'epoch': epoch + 1,
-            'params': params,
-        }
-        
-        utils.save_on_master(save_dict, os.path.join(output_dir, 'checkpoint.pth'))
-        if epoch % 10 == 0:
-            utils.save_on_master(save_dict, os.path.join(output_dir, f'checkpoint_{epoch:03}.pth'))
-        
-        if utils.is_main_process():
-            with (Path(output_dir) / "log.txt").open("a") as f:
-                print(Path(output_dir) / "log.txt")
-                f.write(json.dumps(log_stats) + "\n")
+    folds = 5
+    cv = KFold(n_splits=folds, shuffle=True, split_path=f"spilt_message/TSCeption/{folds}_split")
+    # save_path = f"/home/qty/code/model_ckpt/CCNN/train_type_{train_"
+    
+    for i, (train_dataset, test_dataset) in enumerate(cv.split(dataset)):
+        print(i)
+        # if i <= 4:
+        #     continue
 
+
+        train_loader = DataLoader(train_dataset, batch_size=params.batch_size,shuffle=True)
+        fold = f"fold-{i}"
+        # TODO 导入任务模型和身份模型
+            # 初始化训练好的任务分类模型（任务+身份）
+        output_dir = os.path.join(params.output_dir, fold)
+        os.makedirs(output_dir, exist_ok=True)
+
+        from models import get_model
+        model = get_model("TSCeption")
+        model_path = params.task_model_path
+        model_path_1 = os.path.join(model_path, fold)
+        from utils import load_model, get_ckpt_file
+        task_model = load_model(model, get_ckpt_file(model_path_1))
+
+        # 初始化训练好的身份识别模型
+        from models import get_model_identify
+        model = get_model_identify("TSCeption")
+        model_path = params.identify_model_path
+        model_path_2 = os.path.join(model_path, fold)
+        from utils import load_model, get_ckpt_file
+        identify_model = load_model(model, get_ckpt_file(model_path_2))
+
+        # 设置参数
+        for module in [*decoder.modules(), *encoder.modules()]:
+            if type(module) == torch.nn.BatchNorm2d:
+                module.momentum = params.bn_momentum if params.bn_momentum != -1 else None
+        optim_params = utils.parse_params(params.optimizer)
+        lr_mult = params.batch_size  / 512.0
+        optim_params['lr'] = lr_mult * optim_params['lr'] if 'lr' in optim_params else lr_mult * 1e-3
+        # optim_params['lr'] = 0.0005
+        to_optim = [*encoder.parameters(), *decoder.parameters(),]
+        optimizer = utils.build_optimizer(model_params=to_optim, **optim_params)
+        scheduler = utils.build_lr_scheduler(optimizer=optimizer, **utils.parse_params(params.scheduler)) if params.scheduler is not None else None
+        print('optimizer: %s'%optimizer)
+        print('scheduler: %s'%scheduler)
+
+        # 初始化各个模块参数
+        optimizer_discrim = torch.optim.Adam(discriminator.parameters(), lr=0.001)
+        discriminator = discriminator.to(device)
+        encoder_decoder = models.EncoderDecoder(encoder,  decoder, 
+        params.scale_channels, params.scaling_i, params.scaling_w, params.num_bits, params.redundancy)
+        encoder_decoder = encoder_decoder.to(device)
+
+        print(f"Training on {fold}...")
+        for epoch in range(start_epoch, params.epochs):
+            train_stats = train_one_epoch(task_model,identify_model, encoder_decoder, discriminator, train_loader, optimizer,optimizer_discrim, scheduler, epoch,output_dir=output_dir, params=params)
+            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()}, 'epoch': epoch}
+            save_dict = {
+                'encoder_decoder': encoder_decoder.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'epoch': epoch + 1,
+                'params': params,
+            }
+            # 保存模型的参数
+            utils.save_on_master(save_dict, os.path.join(output_dir, 'checkpoint.pth'))
+            if epoch % 10 == 0:
+                utils.save_on_master(save_dict, os.path.join(output_dir, f'checkpoint_{epoch:03}.pth'))
+            if utils.is_main_process():
+                with (Path(output_dir) / "log.txt").open("a") as f:
+                    print(Path(output_dir) / "log.txt")
+                    f.write(json.dumps(log_stats) + "\n")
+
+  
 def message_loss(fts, targets, m, loss_type='cossim'):
     """
     Compute the message loss
@@ -295,7 +342,7 @@ def test_model(wrong_predictions,imgs, task_labels, model,identify_id, identify_
 
     return wrong_predictions
 
-def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDecoder,discriminator: models.Discriminator, loader, optimizer,optimizer_discrim, scheduler, epoch, params):
+def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDecoder,discriminator: models.Discriminator, loader, optimizer,optimizer_discrim, scheduler, epoch,output_dir, params):
     """
     One epoch of training.
     """
@@ -329,14 +376,11 @@ def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDe
         id_labels = id_labels.type(torch.long).to(device, non_blocking=True)
 
         # ------------- 训练对抗模块 ----------
-        msgs_ori = torch.rand((imgs.shape[0],params.num_bits)) > 0.5 # b k
-        # print(f"msgs_ori:{msgs_ori}")
+        msgs_ori = torch.rand((imgs.shape[0],params.num_bits)) > 0.5 # b 
         msgs = 2 * msgs_ori.type(torch.float).to(device) - 1 # b k
-        # print(f"msgs:{msgs}")
         if msgs.is_cuda:
             tensor_example = msgs.cpu()
             numpy_array = tensor_example.numpy()
-
         # 保存水印的数据
         out_put = f"{output_dir}/example_tensor.txt"
         np.savetxt(out_put, numpy_array, delimiter=',')
@@ -392,13 +436,15 @@ def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDe
         a6 = 0.9
         a7 = 1
         if epoch < 10:
-            loss = loss_i
-        if epoch < 200:
+            loss = loss_w
+        if epoch < 100:
             loss = a1 * loss_w 
-        if epoch < 400:
+        if epoch < 200:
             loss = a6 * loss_w + a7 * loss_i
         else:
             loss = loss_w +loss_i
+
+        # loss = loss_w
 
         # 梯度反传
         optimizer.zero_grad()
@@ -428,8 +474,8 @@ def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDe
         watermarked_signals = watermarked_signals.detach().cpu().numpy()
         normalized_water_data = (watermarked_signals - min_val) / (max_val - min_val)
         result = normalized_or_data - normalized_water_data
-        avg_ssim = calculate_batch_ssim_new(original_signals, watermarked_signals)
-        avg_psnr = calculate_batch_psnr_new(original_signals, watermarked_signals)
+        # avg_ssim = calculate_batch_ssim_new(original_signals, watermarked_signals)
+        # avg_psnr = calculate_batch_psnr_new(original_signals, watermarked_signals)
 
         # 打印输出结果
         log_stats = {
@@ -440,8 +486,8 @@ def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDe
             'identify_acc':identify_acc,
             'bit_acc_avg': torch.mean(bit_accs).item(),
             'lr': optimizer.param_groups[0]['lr'],
-            'PSNR' : avg_psnr.item(),
-            'SSIM' : avg_ssim.item(),
+            # 'PSNR' : avg_psnr.item(),
+            # 'SSIM' : avg_ssim.item(),
         }
         for name, loss in log_stats.items():
             metric_logger.update(**{name:loss})

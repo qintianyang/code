@@ -185,4 +185,4 @@ if __name__ == '__main__':
     model_t = get_model(model_list)
     criterion = nn.CrossEntropyLoss()
     trainer = Train_task_Model()
-    trained_eegnet_model = trainer.train_model(model_t,eeg_dataset,cv, learning_rate=0.001,save_path=save_path,model_name_t=model_list,epochs=200,train_type=train_type)
+    trained_eegnet_model = trainer.train_model(model_t,eeg_dataset,cv, learning_rate=0.001,save_path=save_path,model_name_t=model_list,epochs=50,train_type=train_type)

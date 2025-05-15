@@ -10,6 +10,36 @@ from torcheeg import transforms
 # from encryption import load_keysSS
 from torch.utils.data import Dataset
 from torcheeg.datasets.constants import DEAP_CHANNEL_LOCATION_DICT
+import torch
+from torch.utils.data import Dataset, DataLoader, Subset
+from torchvision import datasets, transforms
+from typing import Union, List
+
+class FilteredDataset(Dataset):
+    """过滤原始数据集，仅保留指定标签的样本"""
+    def __init__(self, original_dataset, target_labels: Union[int, List[int]]):
+        """
+        Args:
+            original_dataset: 原始数据集（如 torchvision.datasets.CIFAR10）
+            target_labels: 需要保留的标签（可以是单个整数或列表）
+        """
+        self.original_dataset = original_dataset
+        self.target_labels = [target_labels] if isinstance(target_labels, int) else target_labels
+        
+        # 获取符合条件样本的索引
+        self.indices = [
+            i for i, (_, label) in enumerate(original_dataset)
+            if label in self.target_labels
+        ]
+        
+    def __len__(self):
+        return len(self.indices)
+    
+    def __getitem__(self, idx):
+        original_idx = self.indices[idx]
+        return self.original_dataset[original_idx]
+
+
 
 def get_watermark( architecture,path):
     match architecture:
