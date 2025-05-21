@@ -10,34 +10,11 @@ def get_config():
         # "new_watermark",
     ]
     ALLOWED_EXPERIMENTS = [
-        "show_stats",  
-        "show_stats_plots", 
-        "no_watermark",  # 完成
-        "from_scratch",  # 完成
-        "pretrain",      # 完成
-        "new_watermark_pretrain", # 完成
-        "new_watermark_from_scratch",  # 完成
-        "pruning_pretrain",  # 完成
-        "fine_tuning",   # 完成
-        "transfer_learning",
-        "Soft_Label_Attack", # 完成
-        "hard_label_attack", # 完成
-        "regularization_with_ground_truth" # 完成
-
-        "from_Soft_Label_Attack", # 完成
-        "from_hard_label_attack", # 完成
-        "from_regularization_with_ground_truth", # 完成
-        "pruning_from_scratch",  # 完成
-        "fine_tuning_from_scratch", # 完成
-
-        "transfer_learning_dense",
-        "transfer_learning_add",
-        "from_transfer_learning" ,
-        "from_transfer_learning_dense" ,
-        "from_transfer_learning_add"
-
-        "quantization",   
-        "feature_attribution",
+       "from_scratch_ep3"
+       "from_scratch_ep3_EWE",
+       "from_scratch_RS",
+       "from_scratch_EEF",
+       "from_scratch_DI"
 
     ]
     TRAINING_MODES = ["skip", "quick", "full"]
@@ -53,7 +30,7 @@ def get_config():
     config_group.add_argument(
         "--experiment",
         # required=True,
-        default= "pretrain" ,
+        default= "from_scratch_EEF" ,
         # choices=ALLOWED_EXPERIMENTS,
         help="Choose one experiment from the above experiments.",
     )
@@ -81,7 +58,7 @@ def get_config():
         help="Skip training, quick training of only 1 fold, or full training of all folds.",
     )
     train_group.add_argument("--batch", type=int,default=64, help="Batch size for training.")
-    train_group.add_argument("--epochs", type=int,default=50, help="Number of training epochs.")
+    train_group.add_argument("--epochs", type=int,default=200, help="Number of training epochs.")
     train_group.add_argument("--lrate", type=float, default=0.0005,help="Learning rate for training.")
     train_group.add_argument(
         "--update_lr_by",

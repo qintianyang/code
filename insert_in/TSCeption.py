@@ -15,7 +15,7 @@ from utils import set_seed,save_graphs_to_excel
 from dataset import get_dataset
 import config_TSCeption
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"  # 只使用第0号GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"  # 只使用第0号GPU
 args = config_TSCeption.get_config()
 
 seed = args["seed"]
@@ -110,6 +110,9 @@ def train():
     raw_data_list = []
     # train 和 test 有三个标签 分别是 数据 任务标签 身份标签
     for i, (train_dataset, test_dataset) in enumerate(cv.split(dataset)):
+        # if i != 0 or i != 1:
+        #     exit()
+            
         fold = f"fold-{i}"
         
         results[fold] = dict()
@@ -120,12 +123,11 @@ def train():
         save_path = f"/home/qty/code/model_ckpt/TSCeption_load/train_type_test"
 
         if experiment == "new_watermark_pretrain" or experiment == "Soft_Label_Attack" or experiment == "hard_label_attack" or experiment == "regularization_with_ground_truth" or experiment == "pruning_pretrain" or experiment == "fine_tuning" or experiment == "transfer_learnings" or experiment == "transfer_learning_dense" or experiment == "transfer_learning_add":
-            save_path = f"/home/qty/code/model_ckpt/CCNN_pretrain"
+            save_path = f"/home/qty/code/model_ckpt/TSCeption_pretrain"
     
         if experiment == "new_watermark_from_scratch" or experiment == "from_Soft_Label_Attack" or experiment == "from_hard_label_attack" or experiment == "from_regularization_with_ground_truth" or experiment == "pruning_from_scratch" or experiment == "fine_tuning_from_scratch"or experiment == "from_transfer_learning" or experiment == "from_transfer_learning_dense" or experiment == "from_transfer_learning_add":
-            save_path = f"/home/qty/code/model_ckpt/CCCNN_from"
+            save_path = f"/home/qty/code/model_ckpt/TSCeption_pretrain"
         print(f"Loading model from {save_path}")
-
 
         # 已经训练好的水印模型
         tri_path =f"/home/qty/code/trigger_data/TSCeption/{fold}/right.pkl"
@@ -217,7 +219,6 @@ def train():
             return results
 
         if experiment == "pretrain":
-            
             # 预训练模型
             load_path = f'{save_path}/fold-{i}'
             model = load_model(model, get_ckpt_file(load_path))
@@ -230,6 +231,7 @@ def train():
         )
             
             # 触发集
+            print(f"触发集:{tri_path}")
             trig_set = TriggerSet_T(
                 tri_path,
                 architecture,
@@ -256,7 +258,7 @@ def train():
             # 在本次epoch之前的准确率
             val_acc = 0
             results[fold] = evaluate()
-            raw_data_acc= results[fold]["eeg"]
+            raw_data_acc= results[fold]["eeg"] 
             raw_data_list.append(raw_data_acc)
 
             # 原始的准确率
@@ -628,7 +630,7 @@ def train():
             BATCH_SIZE = batch_size
             EPOCHS = epochs
             LEARNING_RATE = lr
-            GAMMA = 0.5  # 正则化系数（用于第三种方法）
+            GAMMA = 0.5
 
             trig_set = TriggerSet_T(
                 tri_path,

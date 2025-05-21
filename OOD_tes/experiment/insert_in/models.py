@@ -4,56 +4,66 @@ import torch
 import torch.nn as nn
 from typing import Tuple
 
-
-class CCNN(nn.Module):
-    def __init__(self, in_channels: int = 4, grid_size: Tuple[int, int] = (9, 9), num_classes: int = 2, dropout: float = 0.5):
-        super(CCNN, self).__init__()
-        self.in_channels = in_channels 
-        self.grid_size = grid_size
-        self.num_classes = num_classes
-        self.dropout = dropout
-
-        self.conv1 = nn.Sequential(nn.ZeroPad2d((1, 2, 1, 2)), nn.Conv2d(self.in_channels, 64, kernel_size=4, stride=1),
-                                   nn.ReLU())
-        self.conv2 = nn.Sequential(nn.ZeroPad2d((1, 2, 1, 2)), nn.Conv2d(64, 128, kernel_size=4, stride=1), nn.ReLU())
-        self.conv3 = nn.Sequential(nn.ZeroPad2d((1, 2, 1, 2)), nn.Conv2d(128, 256, kernel_size=4, stride=1), nn.ReLU())
-        self.conv4 = nn.Sequential(nn.ZeroPad2d((1, 2, 1, 2)), nn.Conv2d(256, 64, kernel_size=4, stride=1), nn.ReLU())
-
-        self.lin1 = nn.Sequential(
-            nn.Linear(self.grid_size[0] * self.grid_size[1] * 64, 1024),
-            # nn.Linear(262144, 1024),
-            nn.SELU(), # Not mentioned in paper
-            nn.Dropout2d(self.dropout)
-        )
-        self.lin2 = nn.Linear(1024, self.num_classes)
-
-    def feature_dim(self):
-        return self.grid_size[0] * self.grid_size[1] * 64
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        r'''
-        Args:
-            x (torch.Tensor): EEG signal representation, the ideal input shape is :obj:`[n, 4, 9, 9]`. Here, :obj:`n` corresponds to the batch size, :obj:`4` corresponds to :obj:`in_channels`, and :obj:`(9, 9)` corresponds to :obj:`grid_size`.
-
-        Returns:
-            torch.Tensor[number of sample, number of classes]: the predicted probability that the samples belong to the classes.
-        '''
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-
-        x = x.flatten(start_dim=1)
-        x_out2 = x
-
-        x_feature = self.lin1(x)
-        x_out = self.lin2(x_feature)
-        return x_out, x_feature,x_out2
-
-
-
 class TSCeption(nn.Module):
-    
+    r'''
+    TSCeption. For more details, please refer to the following information.
+
+    - Paper: Ding Y, Robinson N, Zhang S, et al. Tsception: Capturing temporal dynamics and spatial asymmetry from EEG for emotion recognition[J]. arXiv preprint arXiv:2104.02935, 2021.
+    - URL: https://arxiv.org/abs/2104.02935
+    - Related Project: https://github.com/yi-ding-cs/TSception
+
+    Below is a recommended suite for use in emotion recognition tasks:
+
+    .. code-block:: python
+
+        from torcheeg.datasets import DEAPDataset
+        from torcheeg import transforms
+        from torcheeg.datasets.constants import DEAP_CHANNEL_LIST
+        from torcheeg.models import TSCeption
+        from torch.utils.data import DataLoader
+
+        dataset = DEAPDataset(root_path='./data_preprocessed_python',
+                              chunk_size=512,
+                              num_baseline=1,
+                              baseline_chunk_size=512,
+                              offline_transform=transforms.Compose([
+                                  transforms.PickElectrode(PickElectrode.to_index_list(
+                                  ['FP1', 'AF3', 'F3', 'F7',
+                                  'FC5', 'FC1', 'C3', 'T7',
+                                  'CP5', 'CP1', 'P3', 'P7',
+                                  'PO3','O1', 'FP2', 'AF4',
+                                  'F4', 'F8', 'FC6', 'FC2',
+                                  'C4', 'T8', 'CP6', 'CP2',
+                                  'P4', 'P8', 'PO4', 'O2'], DEAP_CHANNEL_LIST)),
+                                  transforms.To2d()
+                              ]),
+                              online_transform=transforms.ToTensor(),
+                              label_transform=transforms.Compose([
+                                  transforms.Select('valence'),
+                                  transforms.Binary(5.0),
+                              ]))
+
+        model = TSCeption(num_classes=2,
+                          num_electrodes=28,
+                          sampling_rate=128,
+                          num_T=15,
+                          num_S=15,
+                          hid_channels=32,
+                          dropout=0.5)
+
+        x, y = next(iter(DataLoader(dataset, batch_size=64)))
+        model(x)
+
+    Args:
+        num_electrodes (int): The number of electrodes. (default: :obj:`28`)
+        num_T (int): The number of multi-scale 1D temporal kernels in the dynamic temporal layer, i.e., :math:`T` kernels in the paper. (default: :obj:`15`)
+        num_S (int): The number of multi-scale 1D spatial kernels in the asymmetric spatial layer. (default: :obj:`15`)
+        in_channels (int): The number of channels of the signal corresponding to each electrode. If the original signal is used as input, in_channels is set to 1; if the original signal is split into multiple sub-bands, in_channels is set to the number of bands. (default: :obj:`1`)
+        hid_channels (int): The number of hidden nodes in the first fully connected layer. (default: :obj:`32`)
+        num_classes (int): The number of classes to predict. (default: :obj:`2`)
+        sampling_rate (int): The sampling rate of the EEG signals, i.e., :math:`f_s` in the paper. (default: :obj:`128`)
+        dropout (float): Probability of an element to be zeroed in the dropout layers. (default: :obj:`0.5`)
+    '''
 
     def __init__(self,
                  num_electrodes: int = 28,
@@ -143,18 +153,14 @@ class TSCeption(nn.Module):
         out_3 = self.fc[2](out_2)
         out_4 = self.fc[3](out_3)
         out = self.fc(out)
-        return out, out_4, out_1
+        return out, out_4
 
     def feature_dim(self):
         return self.num_S
 
 
-
 def get_model(architecture):
     match architecture: 
-        case "CCNN":
-            # from torcheeg.models import CCNN
-            return CCNN(num_classes=2, in_channels=4, grid_size=(9, 9))
 
         case "TSCeption":
             return TSCeption(

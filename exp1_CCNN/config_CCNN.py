@@ -53,7 +53,7 @@ def get_config():
     config_group.add_argument(
         "--experiment",
         # required=True,
-        default= "pretrain" ,
+        default= "from_scratch" ,
         # choices=ALLOWED_EXPERIMENTS,
         help="Choose one experiment from the above experiments.",
     )
@@ -81,7 +81,7 @@ def get_config():
         help="Skip training, quick training of only 1 fold, or full training of all folds.",
     )
     train_group.add_argument("--batch", type=int,default=64, help="Batch size for training.")
-    train_group.add_argument("--epochs", type=int,default=50, help="Number of training epochs.")
+    train_group.add_argument("--epochs", type=int,default=120, help="Number of training epochs.")
     train_group.add_argument("--lrate", type=float, default=0.0005,help="Learning rate for training.")
     train_group.add_argument(
         "--update_lr_by",

@@ -136,7 +136,7 @@ def soft_label_attack(target_model, surrogate_model, loader,pre_loader,val_loade
             if pre_acc > best_val_acc:
                 best_val_acc = pre_acc
                 best_epoch = epoch + 1
-                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.ckpt')
+                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.pth')
                 torch.save(surrogate_model.state_dict(), save_path)
                 print(f"New best model saved at epoch {epoch+1} with val acc {val_acc:.2f}%")
 
@@ -174,7 +174,7 @@ def hard_label_attack(target_model, surrogate_model, loader, perloder,valloader,
             with torch.no_grad():
                 target_outputs,_ = target_model(inputs)
                 _, labels = torch.max(target_outputs, 1)  # 获取预测的类别标签
-            
+
             # 获取替代模型的输出
             surrogate_outputs,_ = surrogate_model(inputs)
             # 计算交叉熵损失
@@ -205,7 +205,7 @@ def hard_label_attack(target_model, surrogate_model, loader, perloder,valloader,
             if pre_acc > best_val_acc:
                 best_val_acc = pre_acc
                 best_epoch = epoch + 1
-                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.ckpt')
+                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.pth')
                 torch.save(surrogate_model.state_dict(), save_path)
                 print(f"New best model saved at epoch {epoch+1} with val acc {val_acc:.2f}%")
 
@@ -213,7 +213,6 @@ def hard_label_attack(target_model, surrogate_model, loader, perloder,valloader,
             torch.save(surrogate_model.state_dict(), 
                     os.path.join(result_model_path, f'model_epoch_{epoch+1}.pth'))
             print(f"Model saved at epoch {epoch+1}")
-        val_acc = 0
     
     return surrogate_model , best_val_acc,val_acc
 
@@ -311,7 +310,7 @@ def regularization_with_ground_truth(target_model, surrogate_model, train_loader
             if pre_acc > best_val_acc:
                 best_val_acc = pre_acc
                 best_epoch = epoch + 1
-                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.ckpt')
+                save_path = os.path.join(result_model_path, f'{best_epoch}_{pre_acc:.4f}_{val_acc:.4f}_model.pth')
                 torch.save(surrogate_model.state_dict(), save_path)
                 print(f"New best model saved at epoch {epoch+1} with val acc {val_acc:.2f}%")
             
@@ -322,7 +321,6 @@ def regularization_with_ground_truth(target_model, surrogate_model, train_loader
             torch.save(surrogate_model.state_dict(), 
                     os.path.join(result_model_path, f'model_epoch_{epoch+1}.pth'))
             print(f"Model saved at epoch {epoch+1}")
-        val_acc = 0
     return surrogate_model, best_val_acc, val_acc
 
 def evaluate(model, data_loader, device):

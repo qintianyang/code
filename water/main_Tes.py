@@ -212,14 +212,9 @@ def main(params):
     start_epoch = 0
     folds = 5
     cv = KFold(n_splits=folds, shuffle=True, split_path=f"spilt_message/TSCeption/{folds}_split")
-    # save_path = f"/home/qty/code/model_ckpt/CCNN/train_type_{train_"
     
     for i, (train_dataset, test_dataset) in enumerate(cv.split(dataset)):
         print(i)
-        # if i <= 4:
-        #     continue
-
-
         train_loader = DataLoader(train_dataset, batch_size=params.batch_size,shuffle=True)
         fold = f"fold-{i}"
         # TODO 导入任务模型和身份模型
@@ -459,7 +454,7 @@ def train_one_epoch(task_model,identify_model, encoder_decoder: models.EncoderDe
         bit_accs = torch.sum(diff, dim=-1) / diff.shape[-1] # b k -> b
 
         # 计算是否符合触发集的样本
-        if bit_accs.mean() > 0.8:
+        if bit_accs.mean() > 0.1:
             wrong_predictions = test_model(wrong_predictions,imgs_w, task_labels, task_model,id_labels,identify_model,device)
     
          # 评价指标计算# 计算SSIM# 计算PSNR

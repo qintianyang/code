@@ -21,41 +21,7 @@ import pandas as pd
 C                   = 2
 weight_decay        = 1e-5
 
-import torch
-import torch.nn.functional as F
 
-def pairwise_euclid_distance(x):
-    """Compute pairwise Euclidean distance matrix."""
-    x_sq = torch.sum(x**2, dim=1, keepdim=True)
-    dist_sq = x_sq + x_sq.t() - 2 * torch.mm(x, x.t())
-    return torch.sqrt(torch.clamp(dist_sq, min=0))
-
-def snnl(x, y, t=0.5, metric='euclidean'):
-    """Soft Nearest Neighbor Loss (PyTorch实现)"""
-    x = F.relu(x)
-    batch_size = x.size(0)
-    
-    # 同类样本掩码
-    same_label_mask = (y.unsqueeze(0) == y.unsqueeze(1)).float()
-    
-    # 计算样本对距离
-    if metric == 'euclidean':
-        dist = pairwise_euclid_distance(x.view(batch_size, -1))
-    elif metric == 'cosine':
-        x_norm = F.normalize(x, p=2, dim=1)
-        dist = 1 - torch.mm(x_norm, x_norm.t())
-    else:
-        raise ValueError("Unsupported metric")
-    
-    # 计算指数相似性
-    exp = torch.clamp(torch.exp(-(dist / t)) - torch.eye(batch_size, device=x.device), min=0, max=1)
-    
-    # 概率矩阵（仅同类样本）
-    prob = (exp / (1e-5 + torch.sum(exp, dim=1, keepdim=True))) * same_label_mask
-    
-    # 损失
-    loss = -torch.mean(torch.log(1e-5 + torch.sum(prob, dim=1)))
-    return loss
 
 class NeuralCollapseLoss(nn.Module):
     def __init__(self, epsilon=5.0):
@@ -78,12 +44,12 @@ class NeuralCollapseLoss(nn.Module):
 def update_class_means(model, train_loader, num_classes,device):
     model.eval()
     # 计算各类别特征均值
-    feature_dim = 1024   # 1024
+    feature_dim = 1024
     class_sums = {i: torch.zeros(feature_dim).cuda() for i in range(num_classes)}
     class_counts = {i: 0 for i in range(num_classes)}
     
     for x, y in train_loader:
-        _, z ,_= model(x.to(device))  # 获取特征
+        _, z = model(x.to(device))  # 获取特征
         for i in range(num_classes):
             mask = (y == i)
             if mask.any():
@@ -155,6 +121,9 @@ class graphs:
             df.to_csv(filename, mode='a' if append else 'w', header=not append, index=False)
             print(f"数据已保存到 {filename}")
 
+
+
+
 class ClassifierTrainer:
     def __init__(self, model, optimizer, device,scheduler):
         self.model = model.to(device)
@@ -216,108 +185,108 @@ class ClassifierTrainer:
                 self.graphs.loss.append(avg_train_loss)
                 self.graphs.accuracy.append(net_acc)
 
-                # for computation in ['Mean','Cov']:  # Mean 每个类别的特征均值  Cov 计算类内协方差矩阵和其他指标
-                #     train_loss = 0.0
-                #     reg_loss = 0.0
-                #     net_correct = 0
-                #     NCC_match_net = 0
-                #     with torch.no_grad():
-                #         for batch_idx, (data, target) in enumerate(train_loader, start=1):
-                #             data, target = data.to(self.device), target.to(self.device)
-                #             # 主任务损失
-                #             out, trigger_features  = self.model(data)
-                #             loss_cls = cls_criterion(out, target)
-                #             # 水印损失
-                #             loss_collapse = collapse_criterion(trigger_features, class_means, target)
-                #             loss = loss_cls + 0.1 * loss_collapse  # 权重可调
-                #             train_loss += loss.item()
+                for computation in ['Mean','Cov']:  # Mean 每个类别的特征均值  Cov 计算类内协方差矩阵和其他指标
+                    train_loss = 0.0
+                    reg_loss = 0.0
+                    net_correct = 0
+                    NCC_match_net = 0
+                    with torch.no_grad():
+                        for batch_idx, (data, target) in enumerate(train_loader, start=1):
+                            data, target = data.to(self.device), target.to(self.device)
+                            # 主任务损失
+                            out, trigger_features  = self.model(data)
+                            loss_cls = cls_criterion(out, target)
+                            # 水印损失
+                            loss_collapse = collapse_criterion(trigger_features, class_means, target)
+                            loss = loss_cls + 0.1 * loss_collapse  # 权重可调
+                            train_loss += loss.item()
 
-                #             reg_loss = train_loss
-                #             # 计算准确率
-                #             _, predicted  = torch.max(out, 1)
-                #             correct = (predicted == target).sum().item()
-                #             net_correct += correct
+                            reg_loss = train_loss
+                            # 计算准确率
+                            _, predicted  = torch.max(out, 1)
+                            correct = (predicted == target).sum().item()
+                            net_correct += correct
 
-                #             for c in range(C):
-                #                 # 获取当前 batch 中属于类别 c 的样本索引
-                #                 idxs = (target == c).nonzero(as_tuple=True)[0]
-                #                 if len(idxs) == 0: # If no class-c in this batch
-                #                     continue
-                #                 h_c = trigger_features[idxs,:] # B CHW
-                #                 if computation == 'Mean':
-                #                     # 累加当前 batch 中类别 c 的特征（用于后续计算均值）
-                #                     mean[c] += torch.sum(h_c, dim=0)  # 按样本维度求和 → shape: [CHW]
-                #                     N[c] += h_c.shape[0]  # 记录类别 c 的样本总数
-                #                 elif computation == 'Cov':
-                #                     # update within-class cov
-                #                     z = h_c - mean[c].unsqueeze(0) # B CHW
-                #                     cov = torch.matmul(z.unsqueeze(-1), # B CHW 1
-                #                                         z.unsqueeze(1))  # B 1 CHW
-                #                     # print(cov.shape)
+                            for c in range(C):
+                                # 获取当前 batch 中属于类别 c 的样本索引
+                                idxs = (target == c).nonzero(as_tuple=True)[0]
+                                if len(idxs) == 0: # If no class-c in this batch
+                                    continue
+                                h_c = trigger_features[idxs,:] # B CHW
+                                if computation == 'Mean':
+                                    # 累加当前 batch 中类别 c 的特征（用于后续计算均值）
+                                    mean[c] += torch.sum(h_c, dim=0)  # 按样本维度求和 → shape: [CHW]
+                                    N[c] += h_c.shape[0]  # 记录类别 c 的样本总数
+                                elif computation == 'Cov':
+                                    # update within-class cov
+                                    z = h_c - mean[c].unsqueeze(0) # B CHW
+                                    cov = torch.matmul(z.unsqueeze(-1), # B CHW 1
+                                                        z.unsqueeze(1))  # B 1 CHW
+                                    # print(cov.shape)
 
-                #                     Sw += torch.sum(cov, dim=0)
-                #                     # during calculation of within-class covariance, calculate:
-                #                     # 1) network's accuracy
-                #                     net_pred = torch.argmax(out[idxs,:], dim=1)
-                #                     # net_correct += sum(net_pred==target[idxs]).item()
-                #                     # 2) agreement between prediction and nearest class center
-                #                     NCC_scores = torch.stack([torch.norm(h_c[i,:] - M.T,dim=1) \
-                #                                                 for i in range(h_c.shape[0])])
-                #                     NCC_pred = torch.argmin(NCC_scores, dim=1)
-                #                     NCC_match_net += sum(NCC_pred==net_pred).item()
+                                    Sw += torch.sum(cov, dim=0)
+                                    # during calculation of within-class covariance, calculate:
+                                    # 1) network's accuracy
+                                    net_pred = torch.argmax(out[idxs,:], dim=1)
+                                    # net_correct += sum(net_pred==target[idxs]).item()
+                                    # 2) agreement between prediction and nearest class center
+                                    NCC_scores = torch.stack([torch.norm(h_c[i,:] - M.T,dim=1) \
+                                                                for i in range(h_c.shape[0])])
+                                    NCC_pred = torch.argmin(NCC_scores, dim=1)
+                                    NCC_match_net += sum(NCC_pred==net_pred).item()
 
-                #     if computation == 'Mean':
-                #         for c in range(C):
-                #             mean[c] /= N[c] # 均值归一化
-                #             M = torch.stack(mean).T # 将均值堆叠并转置
-                #         train_loss /= len(train_loader.dataset)
-                #     elif computation == 'Cov':
-                #         Sw /= sum(N) # 将类内协方差矩阵除以总样本数
+                    if computation == 'Mean':
+                        for c in range(C):
+                            mean[c] /= N[c] # 均值归一化
+                            M = torch.stack(mean).T # 将均值堆叠并转置
+                        train_loss /= len(train_loader.dataset)
+                    elif computation == 'Cov':
+                        Sw /= sum(N) # 将类内协方差矩阵除以总样本数
       
-                # self.graphs.NCC_mismatch.append(1-NCC_match_net/sum(N))
+                self.graphs.NCC_mismatch.append(1-NCC_match_net/sum(N))
 
-                # # global mean
-                # muG = torch.mean(M, dim=1, keepdim=True) # CHW 1  # 计算所有类别均值的平均值
+                # global mean
+                muG = torch.mean(M, dim=1, keepdim=True) # CHW 1  # 计算所有类别均值的平均值
             
-                # # between-class 计算类间协方差矩阵 Sb
-                # M_ = M - muG  
-                # Sb = torch.matmul(M_, M_.T) / C  # 计算类别均值之间的协方差矩阵
+                # between-class 计算类间协方差矩阵 Sb
+                M_ = M - muG  
+                Sb = torch.matmul(M_, M_.T) / C  # 计算类别均值之间的协方差矩阵
 
-                # # avg norm
-                # W  = self.model.lin2.weight              # 分类器权重: [C, CHW] 或 [CHW, C]（取决于定义）
-                # M_norms = torch.norm(M_, dim=0)          # 类别均值的L2范数: [C]
-                # W_norms = torch.norm(W.T, dim=0)         # 分类器权重的L2范数: [C]
+                # avg norm
+                W  = self.model.lin2.weight              # 分类器权重: [C, CHW] 或 [CHW, C]（取决于定义）
+                M_norms = torch.norm(M_, dim=0)          # 类别均值的L2范数: [C]
+                W_norms = torch.norm(W.T, dim=0)         # 分类器权重的L2范数: [C]
 
-                # self.graphs.norm_M_CoV.append((torch.std(M_norms)/torch.mean(M_norms)).item())
-                # self.graphs.norm_W_CoV.append((torch.std(W_norms)/torch.mean(W_norms)).item()) 
+                self.graphs.norm_M_CoV.append((torch.std(M_norms)/torch.mean(M_norms)).item())
+                self.graphs.norm_W_CoV.append((torch.std(W_norms)/torch.mean(W_norms)).item()) 
 
-                # # tr{Sw Sb^-1}
-                # Sw = Sw.cpu().detach().numpy()  
-                # Sb = Sb.cpu().detach().numpy()
-                # # 对Sb进行奇异值分解（SVD）并求伪逆
-                # eigvec, eigval, _ = svds(Sb, k=C-1)
-                # inv_Sb = eigvec @ np.diag(eigval**(-1)) @ eigvec.T 
-                # self.graphs.Sw_invSb.append(np.trace(Sw @ inv_Sb))  # 类内协方差与类间协方差的比值，反映了分类边界的分离程度  值越小：类内紧致且类间分离良好
+                # tr{Sw Sb^-1}
+                Sw = Sw.cpu().detach().numpy()  
+                Sb = Sb.cpu().detach().numpy()
+                # 对Sb进行奇异值分解（SVD）并求伪逆
+                eigvec, eigval, _ = svds(Sb, k=C-1)
+                inv_Sb = eigvec @ np.diag(eigval**(-1)) @ eigvec.T 
+                self.graphs.Sw_invSb.append(np.trace(Sw @ inv_Sb))  # 类内协方差与类间协方差的比值，反映了分类边界的分离程度  值越小：类内紧致且类间分离良好
 
-                # # ||W^T - M_||
-                # normalized_M = M_ / torch.norm(M_,'fro')
-                # normalized_W = W.T / torch.norm(W.T,'fro')
-                # self.graphs.W_M_dist.append((torch.norm(normalized_W - normalized_M)**2).item())  
-                #  # 归一化后的权重矩阵与类别均值矩阵之间的距离，反映两者之间的相似性
-                # # 离趋近于 0: 权重 W 与类别均值 M_ 高度对齐，分类器直接利用特征空间的几何结构
+                # ||W^T - M_||
+                normalized_M = M_ / torch.norm(M_,'fro')
+                normalized_W = W.T / torch.norm(W.T,'fro')
+                self.graphs.W_M_dist.append((torch.norm(normalized_W - normalized_M)**2).item())  
+                 # 归一化后的权重矩阵与类别均值矩阵之间的距离，反映两者之间的相似性
+                # 离趋近于 0: 权重 W 与类别均值 M_ 高度对齐，分类器直接利用特征空间的几何结构
 
-                # # mutual coherence
-                # def coherence(V): 
-                #     G = V.T @ V
-                #     G += torch.ones((C,C),device= self.device) / (C-1)
-                #     G -= torch.diag(torch.diag(G))
-                #     return torch.norm(G,1).item() / (C*(C-1))
+                # mutual coherence
+                def coherence(V): 
+                    G = V.T @ V
+                    G += torch.ones((C,C),device= self.device) / (C-1)
+                    G -= torch.diag(torch.diag(G))
+                    return torch.norm(G,1).item() / (C*(C-1))
 
-                # self.graphs.cos_M.append(coherence(M_/M_norms))
-                # self.graphs.cos_W.append(coherence(W.T/W_norms))  
-                # #分别计算类别均值矩阵和权重矩阵的互相关性，衡量它们列向量之间的相似性
-                # # 值接近 0 → 均值向量接近正交（类别可分性强）；值接近 1 → 权重矩阵的列向量高度相关（类别间相关性强）
-                # # 计算特征空间的局部嵌入空间
+                self.graphs.cos_M.append(coherence(M_/M_norms))
+                self.graphs.cos_W.append(coherence(W.T/W_norms))  
+                #分别计算类别均值矩阵和权重矩阵的互相关性，衡量它们列向量之间的相似性
+                # 值接近 0 → 均值向量接近正交（类别可分性强）；值接近 1 → 权重矩阵的列向量高度相关（类别间相关性强）
+                # 计算特征空间的局部嵌入空间
 
             else:
             # 损失函数
@@ -459,67 +428,67 @@ class ClassifierTrainer:
 
         # loss = self.graphs.reg_loss.cpu().detach().numpy()
         # 绘制图表
-        # plt.figure(1)
-        # plt.semilogy(self.cur_epochs, self.graphs.reg_loss)
-        # plt.legend(['Loss + Weight Decay'])
-        # plt.xlabel('Epoch')
-        # plt.ylabel('Value')
-        # plt.title('Training Loss')
-        # save_path_2 = os.path.join(save_path, 'Training Loss.png')
-        # plt.savefig(save_path_2)
+        plt.figure(1)
+        plt.semilogy(self.cur_epochs, self.graphs.reg_loss)
+        plt.legend(['Loss + Weight Decay'])
+        plt.xlabel('Epoch')
+        plt.ylabel('Value')
+        plt.title('Training Loss')
+        save_path_2 = os.path.join(save_path, 'Training Loss.png')
+        plt.savefig(save_path_2)
 
-        # plt.figure(2)
-        # plt.plot(self.cur_epochs, 100*(1 - np.array(self.graphs.accuracy)))
-        # plt.xlabel('Epoch')
-        # plt.ylabel('Training Error (%)')
-        # plt.title('Training Error')
-        # save_path_3 = os.path.join(save_path, 'Training Error.png')
-        # plt.savefig(save_path_3)
+        plt.figure(2)
+        plt.plot(self.cur_epochs, 100*(1 - np.array(self.graphs.accuracy)))
+        plt.xlabel('Epoch')
+        plt.ylabel('Training Error (%)')
+        plt.title('Training Error')
+        save_path_3 = os.path.join(save_path, 'Training Error.png')
+        plt.savefig(save_path_3)
 
-        # plt.figure(3)
-        # plt.semilogy(self.cur_epochs, self.graphs.Sw_invSb)
-        # plt.xlabel('Epoch')
-        # plt.ylabel('Tr{Sw Sb^-1}')
-        # plt.title('NC1: Activation Collapse')
-        # save_path_4 = os.path.join(save_path, 'NC1: Activation Collapse.png')
-        # plt.savefig(save_path_4)
+        plt.figure(3)
+        plt.semilogy(self.cur_epochs, self.graphs.Sw_invSb)
+        plt.xlabel('Epoch')
+        plt.ylabel('Tr{Sw Sb^-1}')
+        plt.title('NC1: Activation Collapse')
+        save_path_4 = os.path.join(save_path, 'NC1: Activation Collapse.png')
+        plt.savefig(save_path_4)
 
-        # plt.figure(4)
-        # plt.plot(self.cur_epochs, self.graphs.norm_M_CoV)
-        # plt.plot(self.cur_epochs, self.graphs.norm_W_CoV)
-        # plt.legend(['Class Means','Classifiers'])
-        # plt.xlabel('Epoch')
-        # plt.ylabel('Std/Avg of Norms')
-        # plt.title('NC2: Equinorm')
-        # save_path_5 = os.path.join(save_path, 'NC2: Equinorm.png')
-        # plt.savefig(save_path_5)
+        plt.figure(4)
+        plt.plot(self.cur_epochs, self.graphs.norm_M_CoV)
+        plt.plot(self.cur_epochs, self.graphs.norm_W_CoV)
+        plt.legend(['Class Means','Classifiers'])
+        plt.xlabel('Epoch')
+        plt.ylabel('Std/Avg of Norms')
+        plt.title('NC2: Equinorm')
+        save_path_5 = os.path.join(save_path, 'NC2: Equinorm.png')
+        plt.savefig(save_path_5)
 
-        # plt.plot(self.cur_epochs, self.graphs.cos_M)
-        # plt.plot(self.cur_epochs, self.graphs.cos_W)
-        # plt.legend(['Class Means','Classifiers'])
-        # plt.xlabel('Epoch')
-        # plt.ylabel('Avg|Cos + 1/(C-1)|')
-        # plt.title('NC2: Maximal Equiangularity')
-        # save_path_6 = os.path.join(save_path, 'NC2_Maximal_Equiangularity.png')
-        # plt.savefig(save_path_6)
+        plt.plot(self.cur_epochs, self.graphs.cos_M)
+        plt.plot(self.cur_epochs, self.graphs.cos_W)
+        plt.legend(['Class Means','Classifiers'])
+        plt.xlabel('Epoch')
+        plt.ylabel('Avg|Cos + 1/(C-1)|')
+        plt.title('NC2: Maximal Equiangularity')
+        save_path_6 = os.path.join(save_path, 'NC2_Maximal_Equiangularity.png')
+        plt.savefig(save_path_6)
 
-        # plt.figure(6)
-        # plt.plot(self.cur_epochs,self.graphs.W_M_dist)
-        # plt.xlabel('Epoch')
-        # plt.ylabel('||W^T - H||^2')
-        # plt.title('NC3: Self Duality')
-        # save_path_7 = os.path.join(save_path, 'NC3: Self Duality.png')
-        # plt.savefig(save_path_7)
+        plt.figure(6)
+        plt.plot(self.cur_epochs,self.graphs.W_M_dist)
+        plt.xlabel('Epoch')
+        plt.ylabel('||W^T - H||^2')
+        plt.title('NC3: Self Duality')
+        save_path_7 = os.path.join(save_path, 'NC3: Self Duality.png')
+        plt.savefig(save_path_7)
 
-        # plt.figure(7)
-        # plt.plot(self.cur_epochs,self.graphs.NCC_mismatch)
-        # plt.xlabel('Epoch')
-        # plt.ylabel('Proportion Mismatch from NCC')
-        # plt.title('NC4: Convergence to NCC')
-        # save_path_8 = os.path.join(save_path, 'NC4:Convergence to NCC.png')
-        # plt.savefig(save_path_8)
+        plt.figure(7)
+        plt.plot(self.cur_epochs,self.graphs.NCC_mismatch)
+        plt.xlabel('Epoch')
+        plt.ylabel('Proportion Mismatch from NCC')
+        plt.title('NC4: Convergence to NCC')
+        save_path_8 = os.path.join(save_path, 'NC4:Convergence to NCC.png')
+        plt.savefig(save_path_8)
 
-        # plt.show()
+        plt.show()
         return self.graphs,finall_val_accuracy
 
     def fit_white(self, train_loader,val_loader,pre_loader, epochs, save_path):
@@ -811,50 +780,38 @@ class ClassifierTrainer:
 
         return self.graphs,finall_val_accuracy
 
+
     def fit(self, train_loader,val_loader,pre_loader, epochs, save_path):
         best_acc = 0.0
         best_epoch = 0
         for epoch in range(epochs):
 
+            N             = [0 for _ in range(C)]
+            mean          = [0 for _ in range(C)] # 存储每个类别的特征均值
+            Sw            = 0 #存储类内散度矩阵（within-class scatter matrix）
             loss          = 0
             net_correct   = 0 # 网络预测正确的样本数
+            NCC_match_net = 0 # 最近邻分类器（NCC）与网络预测一致的样本数
             cls_criterion = nn.CrossEntropyLoss()
             collapse_criterion = NeuralCollapseLoss(epsilon=5.0)
-            # middel_criterion = 
 
             # 训练阶段
             self.model.train()
             train_loss = 0.0
             sum_reg_loss = 0.0
 
-            # preloader 训练数据+trigger
             if (epoch+1) % 5 == 0:
                 class_means = update_class_means(self.model, pre_loader, num_classes=2,device=self.device)
                 self.cur_epochs.append(epoch)
                 for batch_idx, (data, target) in enumerate(pre_loader, start=1):
-                    data = data.type(torch.float).to(self.device, non_blocking=True) # b c h w
-                    target = target.type(torch.long).to(self.device, non_blocking=True) # b c h w
+                    data, target = data.to(self.device), target.to(self.device)
                     self.optimizer.zero_grad()
                     # 主任务损失
-                    out, trigger_features, middel_features  = self.model(data)
+                    out, trigger_features  = self.model(data)
                     loss_cls = cls_criterion(out, target)
-                    # EWE损失
-                    watermark_mask = (target == 1)  # 水印数据掩码
-                    task_mask = (target != 1)       # 任务数据掩码
-                    if watermark_mask.sum() > 0 and task_mask.sum() > 0:
-                        features = torch.cat([trigger_features[watermark_mask], middel_features[task_mask]], dim=0)
-                        labels = torch.cat([
-                            torch.ones(watermark_mask.sum(), device=self.device),  # 水印标记为1
-                            torch.zeros(task_mask.sum(), device=self.device)       # 任务数据标记为0
-                        ], dim=0)
-                        
-                        loss_snnl = snnl(features, labels, t=0.5)  # 温度参数t可调
-                        # loss = loss_cls + 0.1 * loss_snnl  # 权重可调
-                    else:
-                        loss_snnl = 0
                     # 水印损失
                     loss_collapse = collapse_criterion(trigger_features, class_means, target)
-                    loss = loss_cls + 0.1 *loss_collapse+ 0.1 * loss_snnl  # 权重可调
+                    loss = loss_cls + 0.1 *loss_collapse  # 权重可调
                     total_loss = loss 
                     # 反向传播
                     total_loss.backward()
@@ -865,7 +822,7 @@ class ClassifierTrainer:
                     _, predicted  = torch.max(out, 1)
                     correct = (predicted == target).sum().item()
                     net_correct += correct
-                # 计算平均损失和准确率
+                    # 计算平均损失和准确率
                 avg_train_loss = train_loss / len(pre_loader)
                 net_acc = net_correct / len(pre_loader.dataset)
                 net_acc = 100. * net_acc
@@ -873,16 +830,118 @@ class ClassifierTrainer:
                 self.graphs.reg_loss.append(avg_train_loss)
                 self.graphs.loss.append(avg_train_loss)
                 self.graphs.accuracy.append(net_acc)
+
+                for computation in ['Mean','Cov']:  # Mean 每个类别的特征均值  Cov 计算类内协方差矩阵和其他指标
+                    train_loss = 0.0
+                    reg_loss = 0.0
+                    net_correct = 0
+                    NCC_match_net = 0
+                    with torch.no_grad():
+                        for batch_idx, (data, target) in enumerate(train_loader, start=1):
+                            data, target = data.to(self.device), target.to(self.device)
+                            # 主任务损失
+                            out, trigger_features  = self.model(data)
+                            loss_cls = cls_criterion(out, target)
+                            # 水印损失
+                            loss_collapse = collapse_criterion(trigger_features, class_means, target)
+                            loss = loss_cls + 0.1 * loss_collapse  # 权重可调
+                            train_loss += loss.item()
+
+                            reg_loss = train_loss
+                            # 计算准确率
+                            _, predicted  = torch.max(out, 1)
+                            correct = (predicted == target).sum().item()
+                            net_correct += correct
+
+                            for c in range(C):
+                                # 获取当前 batch 中属于类别 c 的样本索引
+                                idxs = (target == c).nonzero(as_tuple=True)[0]
+                                if len(idxs) == 0: # If no class-c in this batch
+                                    continue
+                                h_c = trigger_features[idxs,:] # B CHW
+                                if computation == 'Mean':
+                                    # 累加当前 batch 中类别 c 的特征（用于后续计算均值）
+                                    mean[c] += torch.sum(h_c, dim=0)  # 按样本维度求和 → shape: [CHW]
+                                    N[c] += h_c.shape[0]  # 记录类别 c 的样本总数
+                                elif computation == 'Cov':
+                                    # update within-class cov
+                                    z = h_c - mean[c].unsqueeze(0) # B CHW
+                                    cov = torch.matmul(z.unsqueeze(-1), # B CHW 1
+                                                        z.unsqueeze(1))  # B 1 CHW
+                                    # print(cov.shape)
+
+                                    Sw += torch.sum(cov, dim=0)
+                                    # during calculation of within-class covariance, calculate:
+                                    # 1) network's accuracy
+                                    net_pred = torch.argmax(out[idxs,:], dim=1)
+                                    # net_correct += sum(net_pred==target[idxs]).item()
+                                    # 2) agreement between prediction and nearest class center
+                                    NCC_scores = torch.stack([torch.norm(h_c[i,:] - M.T,dim=1) \
+                                                                for i in range(h_c.shape[0])])
+                                    NCC_pred = torch.argmin(NCC_scores, dim=1)
+                                    NCC_match_net += sum(NCC_pred==net_pred).item()
+
+                    if computation == 'Mean':
+                        for c in range(C):
+                            mean[c] /= N[c] # 均值归一化
+                            M = torch.stack(mean).T # 将均值堆叠并转置
+                        train_loss /= len(train_loader.dataset)
+                    elif computation == 'Cov':
+                        Sw /= sum(N) # 将类内协方差矩阵除以总样本数
+      
+                self.graphs.NCC_mismatch.append(1-NCC_match_net/sum(N))
+
+                # global mean
+                muG = torch.mean(M, dim=1, keepdim=True) # CHW 1  # 计算所有类别均值的平均值
             
+                # between-class 计算类间协方差矩阵 Sb
+                M_ = M - muG  
+                Sb = torch.matmul(M_, M_.T) / C  # 计算类别均值之间的协方差矩阵
+
+                # avg norm
+                W  = self.model.lin2.weight              # 分类器权重: [C, CHW] 或 [CHW, C]（取决于定义）
+                M_norms = torch.norm(M_, dim=0)          # 类别均值的L2范数: [C]
+                W_norms = torch.norm(W.T, dim=0)         # 分类器权重的L2范数: [C]
+
+                self.graphs.norm_M_CoV.append((torch.std(M_norms)/torch.mean(M_norms)).item())
+                self.graphs.norm_W_CoV.append((torch.std(W_norms)/torch.mean(W_norms)).item()) 
+
+                # tr{Sw Sb^-1}
+                Sw = Sw.cpu().detach().numpy()  
+                Sb = Sb.cpu().detach().numpy()
+                # 对Sb进行奇异值分解（SVD）并求伪逆
+                eigvec, eigval, _ = svds(Sb, k=C-1)
+                inv_Sb = eigvec @ np.diag(eigval**(-1)) @ eigvec.T 
+                self.graphs.Sw_invSb.append(np.trace(Sw @ inv_Sb))  # 类内协方差与类间协方差的比值，反映了分类边界的分离程度  值越小：类内紧致且类间分离良好
+
+                # ||W^T - M_||
+                normalized_M = M_ / torch.norm(M_,'fro')
+                normalized_W = W.T / torch.norm(W.T,'fro')
+                self.graphs.W_M_dist.append((torch.norm(normalized_W - normalized_M)**2).item())  
+                 # 归一化后的权重矩阵与类别均值矩阵之间的距离，反映两者之间的相似性
+                # 离趋近于 0: 权重 W 与类别均值 M_ 高度对齐，分类器直接利用特征空间的几何结构
+
+                # mutual coherence
+                def coherence(V): 
+                    G = V.T @ V
+                    G += torch.ones((C,C),device= self.device) / (C-1)
+                    G -= torch.diag(torch.diag(G))
+                    return torch.norm(G,1).item() / (C*(C-1))
+
+                self.graphs.cos_M.append(coherence(M_/M_norms))
+                self.graphs.cos_W.append(coherence(W.T/W_norms))  
+                #分别计算类别均值矩阵和权重矩阵的互相关性，衡量它们列向量之间的相似性
+                # 值接近 0 → 均值向量接近正交（类别可分性强）；值接近 1 → 权重矩阵的列向量高度相关（类别间相关性强）
+                # 计算特征空间的局部嵌入空间
+
             else:
             # 损失函数
                 class_means = update_class_means(self.model, train_loader, num_classes=2,device=self.device)
                 for batch_idx, (data, target) in enumerate(train_loader, start=1):
-                    target = target.long()
                     data, target = data.to(self.device), target.to(self.device)
                     self.optimizer.zero_grad()
                     # 主任务损失
-                    out, trigger_features,middel_features  = self.model(data)
+                    out, trigger_features  = self.model(data)
                     loss_cls = cls_criterion(out, target)
 
                     # 计算准确率
@@ -890,15 +949,23 @@ class ClassifierTrainer:
                     correct = (predicted == target).sum().item()
                     net_correct += correct
 
-                    # 神经塌缩损失
+                    
                     loss_collapse = collapse_criterion(trigger_features, class_means, target)
                     loss = loss_cls + 0.1 * loss_collapse  # 权重可调
+                    
+                    # loss = loss_cls   # 权重可调
+                    # l2_reg = torch.tensor(0.).to(self.device)
+                    # for param in self.model.parameters():
+                    #     l2_reg += torch.sum(param**2)
+                    # num_params = sum(p.numel() for p in self.model.parameters())
                     reg_loss = loss
+
                     reg_loss.backward()
                     self.optimizer.step()
-                    
+
                     train_loss += loss.item()
                     sum_reg_loss += reg_loss.item()
+                
                 
                 net_correct /= len(train_loader.dataset)
                 net_acc = 100.0 * net_correct
@@ -916,7 +983,7 @@ class ClassifierTrainer:
                     with torch.no_grad():
                         for batch_idx, (data, target) in enumerate(val_loader, start=1):
                             data, target = data.to(self.device), target.to(self.device)
-                            out, trigger_features, middel_features  = self.model(data)
+                            out, trigger_features  = self.model(data)
                             loss_cls = cls_criterion(out, target)
                             val_loss += loss_cls.item()
                             _, predicted = torch.max(out, 1)  # 获取预测类别
@@ -940,7 +1007,7 @@ class ClassifierTrainer:
                 with torch.no_grad():
                     for batch_idx, (data, target) in enumerate(val_loader, start=1):
                         data, target = data.to(self.device), target.to(self.device)
-                        out, trigger_features , middel_features  = self.model(data)
+                        out, trigger_features  = self.model(data)
                         loss_cls = cls_criterion(out, target)
                         val_loss += loss_cls.item()
                         _, predicted = torch.max(out, 1)  # 获取预测类别
@@ -966,14 +1033,78 @@ class ClassifierTrainer:
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(val_loader, start=1):
                 data, target = data.to(self.device), target.to(self.device)
-                out, _  ,_= self.model(data)
+                out, _  = self.model(data)
                 _, predicted = torch.max(out, 1)  # 获取预测类别
                 total += target.size(0)  # 更新总样本数
                 correct += (predicted == target).sum().item()  # 更新正确预测的样本数
             # 计算准确率
             finall_val_accuracy = 100.0 * correct / total
+
         print(f"Validation: val_loss={val_loss:.4f}, val_acc={finall_val_accuracy:.4f}")
 
+        # loss = self.graphs.reg_loss.cpu().detach().numpy()
+        # 绘制图表
+        plt.figure(1)
+        plt.semilogy(self.cur_epochs, self.graphs.reg_loss)
+        plt.legend(['Loss + Weight Decay'])
+        plt.xlabel('Epoch')
+        plt.ylabel('Value')
+        plt.title('Training Loss')
+        save_path_2 = os.path.join(save_path, 'Training Loss.png')
+        plt.savefig(save_path_2)
+
+        plt.figure(2)
+        plt.plot(self.cur_epochs, 100*(1 - np.array(self.graphs.accuracy)))
+        plt.xlabel('Epoch')
+        plt.ylabel('Training Error (%)')
+        plt.title('Training Error')
+        save_path_3 = os.path.join(save_path, 'Training Error.png')
+        plt.savefig(save_path_3)
+
+        plt.figure(3)
+        plt.semilogy(self.cur_epochs, self.graphs.Sw_invSb)
+        plt.xlabel('Epoch')
+        plt.ylabel('Tr{Sw Sb^-1}')
+        plt.title('NC1: Activation Collapse')
+        save_path_4 = os.path.join(save_path, 'NC1: Activation Collapse.png')
+        plt.savefig(save_path_4)
+
+        plt.figure(4)
+        plt.plot(self.cur_epochs, self.graphs.norm_M_CoV)
+        plt.plot(self.cur_epochs, self.graphs.norm_W_CoV)
+        plt.legend(['Class Means','Classifiers'])
+        plt.xlabel('Epoch')
+        plt.ylabel('Std/Avg of Norms')
+        plt.title('NC2: Equinorm')
+        save_path_5 = os.path.join(save_path, 'NC2: Equinorm.png')
+        plt.savefig(save_path_5)
+
+        plt.plot(self.cur_epochs, self.graphs.cos_M)
+        plt.plot(self.cur_epochs, self.graphs.cos_W)
+        plt.legend(['Class Means','Classifiers'])
+        plt.xlabel('Epoch')
+        plt.ylabel('Avg|Cos + 1/(C-1)|')
+        plt.title('NC2: Maximal Equiangularity')
+        save_path_6 = os.path.join(save_path, 'NC2_Maximal_Equiangularity.png')
+        plt.savefig(save_path_6)
+
+        plt.figure(6)
+        plt.plot(self.cur_epochs,self.graphs.W_M_dist)
+        plt.xlabel('Epoch')
+        plt.ylabel('||W^T - H||^2')
+        plt.title('NC3: Self Duality')
+        save_path_7 = os.path.join(save_path, 'NC3: Self Duality.png')
+        plt.savefig(save_path_7)
+
+        plt.figure(7)
+        plt.plot(self.cur_epochs,self.graphs.NCC_mismatch)
+        plt.xlabel('Epoch')
+        plt.ylabel('Proportion Mismatch from NCC')
+        plt.title('NC4: Convergence to NCC')
+        save_path_8 = os.path.join(save_path, 'NC4:Convergence to NCC.png')
+        plt.savefig(save_path_8)
+
+        plt.show()
         return self.graphs,finall_val_accuracy
 
     def test(self,trig_dataloader):
@@ -983,7 +1114,7 @@ class ClassifierTrainer:
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(trig_dataloader, start=1):
                 data, target = data.to(self.device), target.to(self.device)
-                out, trigger_features, middle_features  = self.model(data)
+                out, trigger_features  = self.model(data)
                 _, predicted = torch.max(out, 1)  # 获取预测类别
                 total += target.size(0)  # 更新总样本数
                 correct += (predicted == target).sum().item()  # 更新正确预测的样本数
@@ -1008,4 +1139,121 @@ class ClassifierTrainer:
         print(f"Test: test_acc={test_accuracy:.4f}")
         return test_accuracy
 
+class ModelCheckpoint:
+    def __init__(self, monitor='val_loss', save_path=None, save_top_k=1, mode='min'):
+        self.monitor = monitor
+        self.save_path = save_path
+        self.save_top_k = save_top_k
+        self.mode = mode
+        self.best_values = []
+        self.trainer = None
+        
+    def set_trainer(self, trainer):
+        self.trainer = trainer
+        
+    def on_epoch_end(self, epoch, train_loss, val_loss, optimizer):
+        current_value = val_loss if self.monitor == 'val_loss' else train_loss
+        filename = os.path.join(self.save_path, f"best_model_{epoch}.pt")
+        
+        if self.mode == 'min':
+            if current_value < self.trainer.best_loss:
+                self.trainer.best_loss = current_value
+                torch.save(self.trainer.model.state_dict(), filename)
+                print(f"Model improved. Saved to {filename}")
+        else:
+            if current_value > self.trainer.best_loss:
+                self.trainer.best_loss = current_value
+                torch.save(self.trainer.model.state_dict(), filename)
+                print(f"Model improved. Saved to {filename}")
 
+class EarlyStopping:
+    def __init__(self, monitor='val_loss', patience=5, min_delta=0.0):
+        self.monitor = monitor
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.best_value = float('inf') if monitor == 'val_loss' else -float('inf')
+        self.should_stop = False
+        
+    def on_epoch_end(self, epoch, train_loss, val_loss, optimizer):
+        current_value = val_loss if self.monitor == 'val_loss' else train_loss
+        
+        if (self.monitor == 'val_loss' and current_value < self.best_value - self.min_delta) or \
+           (self.monitor != 'val_loss' and current_value > self.best_value + self.min_delta):
+            self.best_value = current_value
+            self.counter = 0
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.should_stop = True
+                print(f"Early stopping counter: {self.counter}/{self.patience}")
+
+class MultiplyLRScheduler:
+    def __init__(self, multiply_factor, update_interval, start_epoch=0):
+        self.multiply_factor = multiply_factor
+        self.update_interval = update_interval
+        self.start_epoch = start_epoch
+        
+    def on_epoch_end(self, epoch, train_loss, val_loss, optimizer):
+        if epoch >= self.start_epoch and (epoch - self.start_epoch) % self.update_interval == 0:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] *= self.multiply_factor
+            print(f"Learning rate multiplied by {self.multiply_factor} at epoch {epoch}")
+
+# # 示例使用方式
+# if __name__ == "__main__":
+    # # 模型定义
+    # class SampleModel(nn.Module):
+    #     def __init__(self, input_dim, num_classes):
+    #         super().__init__()
+    #         self.fc = nn.Linear(input_dim, num_classes)
+            
+    #     def forward(self, x):
+    #         return self.fc(x)
+
+    # # 自定义损失函数（包含分类损失和其他损失）
+    # def combined_loss(outputs, batch):
+    #     inputs, labels = batch[:2]
+    #     cls_loss = F.cross_entropy(outputs, labels)
+        
+    #     # 示例：添加L2正则化
+    #     l2_lambda = 0.001
+    #     l2_reg = torch.tensor(0.)
+    #     for param in model.parameters():
+    #         l2_reg += torch.norm(param)
+    #     total_loss = cls_loss + l2_lambda * l2_reg
+        
+    #     return total_loss
+
+    # # 初始化组件
+    # device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    # model = SampleModel(input_dim=1024, num_classes=16)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    
+    # # 创建回调
+    # callbacks = [
+    #     EarlyStopping(monitor='val_loss', patience=5),
+    #     ModelCheckpoint(monitor='val_loss', save_path="./checkpoints"),
+    #     MultiplyLRScheduler(multiply_factor=0.1, update_interval=5)
+    # ]
+    
+    # # 初始化训练器
+    # trainer = ClassifierTrainer(
+    #     model=model,
+    #     optimizer=optimizer,
+    #     device=device,
+    #     loss_fn=combined_loss,
+    #     callbacks=callbacks
+    # )
+    
+    # # 创建示例数据加载器
+    # train_loader = DataLoader(torch.utils.data.TensorDataset(torch.randn(100, 1024), torch.randint(0, 16, (100,))), batch_size=32)
+    # val_loader = DataLoader(torch.utils.data.TensorDataset(torch.randn(20, 1024), torch.randint(0, 16, (20,))), batch_size=32)
+    
+    # # 开始训练
+    # trainer.fit(
+    #     train_loader=train_loader,
+    #     val_loader=val_loader,
+    #     epochs=50,
+    #     save_path="./checkpoints"
+    # )

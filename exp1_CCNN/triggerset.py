@@ -15,24 +15,13 @@ def get_watermark( architecture,path):
     match architecture:
         case "CCNN":
             import pickle
-            # path = "/home/qty/project2/watermarking-eeg-models-main/tiggerest/CCNN/wrong_predictions_40_51_3.pkl" # 假设数据存储在该文件中
             with open(path, 'rb') as f:
                 wrong_predictions = pickle.load(f)
             return wrong_predictions
 
-        case "TSCeption":
-            import pickle
-            path = "/home/qty/code/trigger_data/TSCeption/fold-4/right.pkl" # 假设数据存储在该文件中
-            with open(path, 'rb') as f:
-                wrong_predictions = pickle.load(f)
-            return wrong_predictions
         case _:
             raise ValueError("Invalid architecture!")
 
-class Verifier(Enum):
-    CORRECT = "Abdelaziz->AHMED a.k.a OWNER<-Fathi @ Feb 15, 2025"
-    WRONG = "Abdelaziz->NOT OWNER<-Fathi @ Feb 15, 2025"
-    NEW = "Abdelaziz->ATTACKER<-Fathi @ Feb 15, 2025"
 
 class ModifiedDataset(Dataset):
     def __init__(self, original_dataset):
@@ -49,43 +38,6 @@ class ModifiedDataset(Dataset):
 
 # 使用方式
 # train_dataset = ModifiedDataset(train_data)
-
-
-
-class TriggerSet_T(Dataset):
-    def __init__(
-        self,
-        path,
-        architecture,
-        data_type,
-          # tig_test: 表示测试是否是自己的模型， tig_train: 训练集
-        # watermark=True,
-    ):
-        self.wrong_predictions = get_watermark(architecture,path)
-        self.data_type = data_type
-
-    def __len__(self):
-        """
-        返回数据集的大小。
-        """
-        return len(self.wrong_predictions)
-
-    def __getitem__(self, idx):
-        """
-        根据索引返回单个样本。
-        :param idx: 样本索引。
-        :return: 图像、真实标签和预测标签。
-        """
-
-        image, true_label, pred_label = self.wrong_predictions[idx]
-        # print(true_label)
-
-        if self.data_type == "id":
-            return image, true_label
-        if self.data_type == "identify":
-            return image, true_label,pred_label
-        if self.data_type == "all":
-            return  image, true_label
 
 class TriggerSet(Dataset):
     def __init__(
